@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment variables (NEVER commit)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+!**/.env.example
+
+# Claude Code (personal settings, may contain API keys)
+.claude/
+
+# VS Code (local settings)
+.vscode/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Node / Frontend
+node_modules/
+.next/
+.npm/
+dist/
+*.node
+
+# Runtime generated files
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Lock files (regenerated)
+uv.lock
+package-lock.json
+
+# MkDocs build output
+site/
+
+# pytest / ruff cache
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Sample generated data
+/sample/agentic_flow_samples.egg-info/
+/sample/guide/data/
+/sample/memory/
+
+# AgenticTranscoder (internal docs and generated output)
+/sample/agentic_transcoder/design_philosophy.md
+/sample/agentic_transcoder/workspace/

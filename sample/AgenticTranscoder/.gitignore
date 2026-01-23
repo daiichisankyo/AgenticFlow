@@ -1,0 +1,15 @@
+# Environment
+.env.local
+
+# Workspace (user working directory)
+workspace/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+dist/
+
+# Lock files
+uv.lock

@@ -1,0 +1,32 @@
+[project]
+name = "guardrails-agent"
+version = "0.1.0"
+description = "Chat Agent with openai-guardrails integration"
+requires-python = ">=3.12"
+dependencies = [
+    "agentic-flow",
+    "openai-agents>=0.3.2",
+    "openai-guardrails>=0.1",
+    "spacy>=3.7",
+    "en-core-web-sm",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "python-dotenv>=1.0",
+    "chatkit",
+    "httpx>=0.27",
+]
+
+[tool.uv.sources]
+agentic-flow = { path = "../../../..", editable = true }
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl" }
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = [".", "../../../../src"]
+testpaths = ["tests"]

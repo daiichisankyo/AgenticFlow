@@ -1,0 +1,107 @@
+site_name: AF - Agentic Flow Framework
+site_description: Call-Spec Discipline for LLM Agent Workflows
+site_url: https://daiichisankyo.github.io/AgenticFlow/
+
+repo_name: AgenticFlow
+repo_url: https://github.com/daiichisankyo/AgenticFlow
+
+docs_dir: docs/en
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tabs
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ["."]
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - tables
+  - attr_list
+  - md_in_html
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mermaid-config.js
+
+watch:
+  - docs/en
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Your First Flow: getting-started/first-flow.md
+  - Concepts:
+      - Call-Spec Discipline: concepts/index.md
+      - ExecutionSpec: concepts/execution-spec.md
+      - Flow & Runner: concepts/flow-runner.md
+      - Phase: concepts/phase.md
+      - Modifiers: concepts/modifiers.md
+      - Context Resolution: context-resolution.md
+  - Guides:
+      - Streaming: guides/streaming.md
+      - ChatKit Integration: guides/chatkit.md
+      - Structured Output: guides/structured-output.md
+      - Testing: guides/testing.md
+  - Reference:
+      - API: reference/api.md
+      - SDK Compatibility: reference/sdk-compatibility.md
+  - Examples:
+      - Multi-Agent Workflow: examples/multi-agent.md
+      - Review Loop: examples/review-loop.md

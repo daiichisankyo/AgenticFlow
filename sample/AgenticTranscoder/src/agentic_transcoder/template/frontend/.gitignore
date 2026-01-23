@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+.next/
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment variables (never commit)
+.env
+.env.local
+.env.*.local

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "guardrails": [
+    {
+      "name": "Jailbreak",
+      "config": {
+        "model": "gpt-5.2",
+        "confidence_threshold": 0.7
+      }
+    },
+    {
+      "name": "Moderation",
+      "config": {
+        "categories": [
+          "sexual/minors",
+          "hate/threatening",
+          "harassment/threatening",
+          "self-harm/instructions",
+          "violence/graphic",
+          "illicit/violent"
+        ]
+      }
+    },
+    {
+      "name": "Contains PII",
+      "config": {
+        "block": false,
+        "detect_encoded_pii": true,
+        "entities": ["CREDIT_CARD", "US_BANK_NUMBER", "US_PASSPORT", "US_SSN"]
+      }
+    }
+  ]
+}
