@@ -15,13 +15,13 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add AF to your project
-uv add git+https://github.com/daiichisankyo/AgenticFlow.git
+uv add ds-agentic-flow
 ```
 
 ## Install with pip (alternative)
 
 ```bash
-pip install git+https://github.com/daiichisankyo/AgenticFlow.git
+pip install ds-agentic-flow
 ```
 
 This installs AF and its dependencies, including the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/).

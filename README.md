@@ -1,5 +1,6 @@
 # AF - Agentic Flow Framework
 
+[![PyPI](https://img.shields.io/pypi/v/ds-agentic-flow.svg)](https://pypi.org/project/ds-agentic-flow/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-online-green.svg)](https://daiichisankyo.github.io/AgenticFlow/)
@@ -96,13 +97,13 @@ result = await runner(query)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add AF to your project
-uv add git+https://github.com/daiichisankyo/AgenticFlow.git
+uv add ds-agentic-flow
 ```
 
 ### With pip (alternative)
 
 ```bash
-pip install git+https://github.com/daiichisankyo/AgenticFlow.git
+pip install ds-agentic-flow
 ```
 
 ### Set your API key

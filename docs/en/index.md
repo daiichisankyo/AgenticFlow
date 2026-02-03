@@ -116,10 +116,10 @@ result = await runner("What is Python?")
 
 ```bash
 # With uv (recommended)
-uv add git+https://github.com/daiichisankyo/AgenticFlow.git
+uv add ds-agentic-flow
 
 # With pip
-pip install git+https://github.com/daiichisankyo/AgenticFlow.git
+pip install ds-agentic-flow
 ```
 
 ---

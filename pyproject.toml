@@ -1,13 +1,33 @@
 [project]
-name = "agentic-flow"
-version = "0.35"
+name = "ds-agentic-flow"
+version = "0.36"
 description = "Minimal wrapper over OpenAI Agent SDK with method chaining and ChatKit integration"
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "SnowLightPath", email = "takuma.shibahara@daiichisankyo.com"},
+]
+keywords = ["agent", "workflow", "openai", "llm", "async", "chatkit"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
 dependencies = [
     "openai-agents>=0.3.2",
     "openai-chatkit>=1.4.0,<2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/daiichisankyo/AgenticFlow"
+Repository = "https://github.com/daiichisankyo/AgenticFlow"
+Issues = "https://github.com/daiichisankyo/AgenticFlow/issues"
 
 [build-system]
 requires = ["hatchling"]
