@@ -1,0 +1,98 @@
+/* Agentic Flow theme - matching frontend top gradient color */
+
+:root {
+  --md-primary-fg-color: #4A9AD4;
+  --md-primary-fg-color--light: #6BB5E0;
+  --md-primary-fg-color--dark: #3178B5;
+  --md-accent-fg-color: #4A9AD4;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #4A9AD4;
+  --md-primary-fg-color--light: #6BB5E0;
+  --md-primary-fg-color--dark: #3178B5;
+  --md-accent-fg-color: #6BB5E0;
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  margin: 1.5rem 0;
+}
+
+[data-md-color-scheme="slate"] .mermaid {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-color: #334155;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Mermaid subgraph styling */
+.mermaid .cluster rect {
+  fill: rgba(74, 154, 212, 0.08) !important;
+  stroke: #4A9AD4 !important;
+  stroke-width: 2px !important;
+  rx: 8px !important;
+  ry: 8px !important;
+}
+
+.mermaid .cluster-label .nodeLabel {
+  color: #3178B5 !important;
+  font-weight: 600 !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .cluster rect {
+  fill: rgba(107, 181, 224, 0.1) !important;
+  stroke: #6BB5E0 !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .cluster-label .nodeLabel {
+  color: #6BB5E0 !important;
+}
+
+/* Mermaid edge styling */
+.mermaid .edgePath path {
+  stroke: #94a3b8 !important;
+  stroke-width: 2px !important;
+}
+
+.mermaid .edgeLabel {
+  background-color: transparent !important;
+  color: #64748b !important;
+  font-size: 0.85rem !important;
+}
+
+.mermaid .edgeLabel rect {
+  fill: transparent !important;
+  stroke: none !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .edgePath path {
+  stroke: #64748b !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .edgeLabel {
+  background-color: transparent !important;
+  color: #94a3b8 !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .edgeLabel rect {
+  fill: transparent !important;
+  stroke: none !important;
+}
+
+/* Mermaid arrow markers */
+.mermaid .marker {
+  fill: #94a3b8 !important;
+  stroke: #94a3b8 !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .marker {
+  fill: #64748b !important;
+  stroke: #64748b !important;
+}
