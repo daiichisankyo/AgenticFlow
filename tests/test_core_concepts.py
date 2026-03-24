@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from agentic_flow import Agent, ExecutionSpec, Runner, phase, reasoning
 from agentic_flow.agent import current_handler
+from agentic_flow.types import AgentResult
 
 
 class Sentiment(BaseModel):
@@ -58,15 +59,15 @@ class TestAgent:
 
         assert isinstance(spec, ExecutionSpec)
         assert spec.input == "hello"
-        assert spec.streaming is False
+        assert spec.is_streaming is False
 
     def test_stream_chain(self):
-        """agent(prompt).stream() sets streaming=True."""
+        """agent(prompt).stream() sets is_streaming=True."""
         agent = Agent(name="test", instructions="OK", model="gpt-5.2")
 
         spec = agent("hello").stream()
 
-        assert spec.streaming is True
+        assert spec.is_streaming is True
 
     def test_isolated_chain(self):
         """agent(prompt).isolated() sets is_isolated=True."""
@@ -83,7 +84,7 @@ class TestAgent:
         spec = agent("hello").isolated().stream()
 
         assert spec.is_isolated is True
-        assert spec.streaming is True
+        assert spec.is_streaming is True
 
     @pytest.mark.asyncio
     async def test_agent_with_model_settings(self, handler_log):
@@ -161,7 +162,7 @@ class TestPhase:
 
     @pytest.mark.asyncio
     async def test_phase_handler_inheritance(self, handler_log):
-        """Agent inside phase inherits handler from Runner."""
+        """Agent inside phase inherits handler from Runner and receives AgentResult."""
         agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
 
         async def flow(msg: str) -> str:
@@ -172,7 +173,8 @@ class TestPhase:
         result = await chat("test")
 
         assert "OK" in result
-        assert len(handler_log.events) > 0
+        agent_results = [e for e in handler_log.events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Handler should receive AgentResult"
 
     @pytest.mark.asyncio
     async def test_phase_share_context(self):

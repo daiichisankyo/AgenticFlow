@@ -1,4 +1,4 @@
-"""Agentic Flow Quickstart - Basic example."""
+"""AgenticFlow Quickstart - Basic example."""
 
 from agents import SQLiteSession
 

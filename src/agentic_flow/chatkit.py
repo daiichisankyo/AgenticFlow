@@ -39,12 +39,12 @@ current_chatkit_context: ContextVar[ChatKitExecutionContext | None] = ContextVar
 
 
 class ChatKitExecutionContext:
-    """Context for ChatKit Server execution with workflow boundary management.
+    """Context for ChatKit Server execution with full-text display.
 
     Manages:
-    - Event queue for streaming to frontend
+    - Event queue for full-text result delivery to frontend
     - Workflow boundaries for multi-agent flows
-    - Agent execution with stream_agent_response
+    - Agent execution with full-text-at-once output semantics
     """
 
     def __init__(self, agent_context: AgentContext, store: Store):
@@ -56,6 +56,26 @@ class ChatKitExecutionContext:
     def thread(self):
         return self.agent_context.thread
 
+    async def emit_message(self, text: str) -> None:
+        """Emit a text message to ChatKit store and push events."""
+        from chatkit.types import (
+            AssistantMessageContent,
+            AssistantMessageItem,
+            ThreadItemAddedEvent,
+            ThreadItemDoneEvent,
+        )
+
+        item_id = self.store.generate_item_id("message", self.thread, {})
+        item = AssistantMessageItem(
+            id=item_id,
+            thread_id=self.thread.id,
+            created_at=datetime.now(),
+            content=[AssistantMessageContent(type="output_text", text=text, annotations=[])],
+        )
+        await self.store.add_thread_item(self.thread.id, item, self.agent_context.request_context)
+        await self.push_event(ThreadItemAddedEvent(type="thread.item.added", item=item))
+        await self.push_event(ThreadItemDoneEvent(type="thread.item.done", item=item))
+
     async def emit_phase_label(self, label: str) -> None:
         """Emit a phase label to create workflow boundary.
 
@@ -63,52 +83,17 @@ class ChatKitExecutionContext:
         stream_agent_response sees a message (not workflow) as last item
         and creates a new workflow for reasoning display.
         """
-        from chatkit.types import (
-            AssistantMessageContent,
-            AssistantMessageItem,
-            ThreadItemAddedEvent,
-            ThreadItemDoneEvent,
-        )
-
-        item_id = self.store.generate_item_id("message", self.thread, {})
-        item = AssistantMessageItem(
-            id=item_id,
-            thread_id=self.thread.id,
-            created_at=datetime.now(),
-            content=[AssistantMessageContent(type="output_text", text=label, annotations=[])],
-        )
-        await self.store.add_thread_item(self.thread.id, item, self.agent_context.request_context)
-        await self.push_event(ThreadItemAddedEvent(type="thread.item.added", item=item))
-        await self.push_event(ThreadItemDoneEvent(type="thread.item.done", item=item))
+        await self.emit_message(label)
 
     async def emit_agent_result(self, output: Any) -> None:
-        """Emit agent result as message for UI display (non-streaming execution).
+        """Emit agent result as full-text message for UI display.
 
-        For non-streaming agent calls, this method displays the result in the
-        ChatKit UI. Streaming calls use execute_spec() which handles display
-        through stream_agent_response().
+        Used by both streaming and non-streaming paths. Display is always
+        full-text-at-once regardless of execution mode.
         """
-        from chatkit.types import (
-            AssistantMessageContent,
-            AssistantMessageItem,
-            ThreadItemAddedEvent,
-            ThreadItemDoneEvent,
-        )
-
         from .utils import serialize_output
 
-        output_str = serialize_output(output)
-
-        item_id = self.store.generate_item_id("message", self.thread, {})
-        item = AssistantMessageItem(
-            id=item_id,
-            thread_id=self.thread.id,
-            created_at=datetime.now(),
-            content=[AssistantMessageContent(type="output_text", text=output_str, annotations=[])],
-        )
-        await self.store.add_thread_item(self.thread.id, item, self.agent_context.request_context)
-        await self.push_event(ThreadItemAddedEvent(type="thread.item.added", item=item))
-        await self.push_event(ThreadItemDoneEvent(type="thread.item.done", item=item))
+        await self.emit_message(serialize_output(output))
 
     async def close_workflow(self) -> None:
         """Close the current workflow after agent execution (best effort).
@@ -135,48 +120,47 @@ class ChatKitExecutionContext:
             pass
 
     async def execute_spec(self, spec: ExecutionSpec) -> Any:
-        """Execute ExecutionSpec with stream_agent_response.
+        """Execute ExecutionSpec and emit full-text result to ChatKit.
 
-        Streams events to the queue and returns final output.
+        .stream() controls internal execution mode, not display.
+        Runs streaming internally for performance, then emits the full
+        result as a single message via emit_agent_result().
+
         Returns T (str or Pydantic model based on Agent's output_type).
 
-        Note: Uses Runner.run_streamed with context=agent_context to enable
-        proper workflow/reasoning display in ChatKit.
-
-        Session handling follows docs/design/execution-model.md:
-        - phase 外: SDK handles Session read/write (str input)
-        - phase 内: PhaseSession only, no Session (list input)
+        Session handling:
+        - Outside phase: SDK handles Session read/write (str input)
+        - Inside phase: PhaseSession only, no Session (list input)
         - phase(persist=True): last pair written to Session at phase end
 
-        SDK constraint: list input + session is not allowed.
-        resolve_input() returns (str, session) or (list, None) appropriately.
-
-        When is_silent=True, events are not pushed to the queue (no UI display).
+        When is_silent=True, result is not emitted to ChatKit (no UI display).
         """
         from agents import Runner
-        from chatkit.agents import stream_agent_response
 
         input_data, session = spec.resolve_input()
 
-        # Build run_kwargs: session + spec modifiers (.run_config, .run_kwarg, .max_turns)
-        run_kwargs: dict = {"session": session, **spec.run_kwargs}
-        if spec.max_turns_sdk is not None:
-            run_kwargs["max_turns"] = spec.max_turns_sdk
+        run_kwargs = spec.build_run_kwargs(session)
 
-        # ChatKit context overwrites .context() modifier (required for workflow display)
-        # Limitation: .context() is not supported in ChatKit mode
+        # ChatKit context overwrites .context() modifier (required for workflow display).
+        # Limitation: .context() modifier is silently ignored in ChatKit mode because
+        # AgentContext must be the context for workflow boundaries to function.
+        # If you need dependency injection in ChatKit mode, use Agent hooks or
+        # pass data through the flow function instead.
         run_kwargs["context"] = self.agent_context
 
         result = Runner.run_streamed(spec.sdk_agent, input_data, **run_kwargs)
 
-        async for event in stream_agent_response(self.agent_context, result):
-            if not spec.is_silent:
-                await self.push_event(event)
+        # Consume stream internally — delta events are NOT forwarded to ChatKit queue
+        async for _event in result.stream_events():
+            pass
 
-        # Close workflow after each agent execution to ensure next agent gets its own workflow
-        await self.close_workflow()
+        output = result.final_output
 
-        return result.final_output
+        # Emit full-text result as single message
+        if not spec.is_silent:
+            await self.emit_agent_result(output)
+
+        return output
 
     async def push_event(self, event: ThreadStreamEvent) -> None:
         """Push event to queue."""

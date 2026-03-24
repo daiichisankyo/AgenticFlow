@@ -6,6 +6,7 @@ They return standard SDK types that can be passed to Agent.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from agents import ModelSettings
@@ -13,6 +14,13 @@ from openai.types.shared.reasoning import Reasoning
 from pydantic import BaseModel
 
 ReasoningEffort = Literal["low", "medium", "high"]
+
+
+async def call_handler(handler: Callable[..., Any], event: Any) -> None:
+    """Call a handler that may be sync or async."""
+    result = handler(event)
+    if hasattr(result, "__await__"):
+        await result
 
 
 def serialize_output(output: Any) -> str:

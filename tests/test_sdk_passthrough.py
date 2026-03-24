@@ -15,6 +15,7 @@ import pytest
 from agents import function_tool
 
 from agentic_flow import Agent, Runner, phase
+from agentic_flow.types import AgentResult
 
 
 @function_tool
@@ -83,7 +84,7 @@ class TestToolsParameter:
 
     @pytest.mark.asyncio
     async def test_agent_tools_with_streaming(self, handler_log):
-        """Agent with tools works with streaming."""
+        """Agent with tools works with streaming and emits AgentResult."""
         agent = Agent(
             name="weather_agent",
             instructions="Use get_current_weather tool. Be concise.",
@@ -99,7 +100,8 @@ class TestToolsParameter:
         result = await chat("Weather in Paris?")
 
         assert len(result) > 0
-        assert len(handler_log.events) > 0
+        agent_results = [e for e in handler_log.events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Handler should receive AgentResult"
         print(f"Streaming tool result: {result}")
 
 

@@ -99,10 +99,10 @@ In the ChatKit UI:
 ChatKit uses "workflows" to group reasoning display. AF manages these automatically:
 
 1. `phase()` start → `emit_phase_label()` → saves message to store
-2. Agent execution → `stream_agent_response()` → creates workflow
+2. Agent execution → `emit_agent_result()` → full-text result to store
 3. `phase()` end → `close_workflow()` → ends workflow
 
-This ensures each phase gets independent reasoning display.
+This ensures each phase gets its own display boundary.
 
 ## Handler vs ChatKit
 

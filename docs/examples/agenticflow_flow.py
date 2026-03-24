@@ -1,4 +1,4 @@
-"""Agentic Flow - Same complex flow, clean code."""
+"""AgenticFlow - Same complex flow, clean code."""
 
 import agentic_flow as af
 

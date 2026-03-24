@@ -1,20 +1,34 @@
 # Streaming
 
-Streaming enables real-time output display. This guide covers CLI streaming with handlers.
+`.stream()` controls the internal execution mode — it uses the streaming API for faster first-token latency. Display is always full-text-at-once regardless of execution mode.
 
 ## Basic Streaming
 
-Add `.stream()` to enable streaming:
+Add `.stream()` to use the streaming API internally:
 
 ```python
 result = await assistant("Hello").stream()
 ```
 
-Without `.stream()`, you get only the final result. With `.stream()`, events are forwarded to your handler as they arrive.
+Both `.stream()` and non-streaming paths deliver the same result. The difference is internal: `.stream()` uses `Runner.run_streamed` for faster first-token, while non-streaming uses `Runner.run`.
+
+## Display Model
+
+AF uses a full-text-at-once display model. When an agent completes, the result is delivered through a fallback chain:
+
+```
+ChatKit > Handler > print()
+```
+
+- **ChatKit context active**: Result emitted to ChatKit UI
+- **Handler set (no ChatKit)**: `AgentResult(content=output)` sent to handler
+- **Neither**: `print(output)` to stdout
+
+This applies to both `.stream()` and non-streaming execution.
 
 ## CLI Handler
 
-For command-line output, create a handler:
+For command-line output, create a handler that receives `AgentResult`:
 
 ```python
 import agentic_flow as af
@@ -22,9 +36,9 @@ import agentic_flow as af
 assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.2")
 
 def cli_handler(event):
-    # Text delta from streaming
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+    # Agent completed — display full result
+    if isinstance(event, af.AgentResult):
+        print(event.content)
 
 async def my_flow(message: str) -> str:
     async with af.phase("Response"):
@@ -32,15 +46,14 @@ async def my_flow(message: str) -> str:
 
 runner = af.Runner(flow=my_flow, handler=cli_handler)
 result = runner.run_sync("Hello!")
-print()  # Newline after streaming
 ```
 
-## Handler and Event Types
+## Handler Event Types
 
-Your handler receives various event types:
+Your handler receives three event types:
 
 ```python
-import agentic_flow as af, af.AgentResult
+import agentic_flow as af
 
 def full_handler(event):
     # Phase boundaries
@@ -52,96 +65,20 @@ def full_handler(event):
         print(f"\n[/{event.label}] ({event.elapsed_ms}ms)")
         return
 
-    # Non-streaming agent result
+    # Agent result (full text, emitted once per agent call)
     if isinstance(event, af.AgentResult):
         print(event.content)
         return
-
-    # Streaming text delta
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
 ```
 
-## SDK StreamEvent
+| Event Type | When Emitted | Key Attributes |
+|:-----------|:-------------|:---------------|
+| `af.PhaseStarted` | Entering a phase | `label` (str) |
+| `af.PhaseEnded` | Exiting a phase | `label` (str), `elapsed_ms` (int) |
+| `af.AgentResult` | Agent execution completes | `content` (Any — str or Pydantic model) |
 
-Most streaming events are SDK `StreamEvent` objects wrapped in `raw_response_event`. The `data.type` field identifies the specific event:
-
-| Event Type | Description | Key Attributes |
-|:-----------|:------------|:---------------|
-| `response.output_text.delta` | Text output chunk | `data.delta` (str) |
-| `response.reasoning_summary_text.delta` | Reasoning summary chunk | `data.delta` (str) |
-| `response.function_call_arguments.delta` | Tool arguments chunk | `data.delta` (str, JSON fragment) |
-| `response.output_item.added` | New output item started | `data.item` (type, name) |
-
-```python
-def inspect_handler(event):
-    # Check for raw_response_event wrapper
-    if getattr(event, "type", None) != "raw_response_event":
-        return
-
-    data = getattr(event, "data", None)
-    if not data:
-        return
-
-    data_type = getattr(data, "type", "")
-
-    # Text output
-    if data_type == "response.output_text.delta":
-        print(data.delta, end="", flush=True)
-
-    # Reasoning (for separate display)
-    elif data_type == "response.reasoning_summary_text.delta":
-        print(f"[Reasoning] {data.delta}")
-
-    # Tool call arguments (JSON streaming)
-    elif data_type == "response.function_call_arguments.delta":
-        print(f"[Tool Args] {data.delta}")
-
-    # New tool call started
-    elif data_type == "response.output_item.added":
-        item = getattr(data, "item", None)
-        if item and getattr(item, "type", "") == "function_call":
-            print(f"[Tool] {getattr(item, 'name', 'unknown')}")
-```
-
-## Dual-Panel Display
-
-For advanced CLI applications, separate reasoning from output:
-
-```python
-class DualPanelHandler:
-    def __init__(self):
-        self.reasoning_buffer = ""
-        self.output_buffer = ""
-
-    def __call__(self, event):
-        if getattr(event, "type", None) != "raw_response_event":
-            return
-
-        data = getattr(event, "data", None)
-        if not data:
-            return
-
-        data_type = getattr(data, "type", "")
-        delta = getattr(data, "delta", "")
-
-        if data_type == "response.reasoning_summary_text.delta":
-            self.reasoning_buffer += delta
-            self.refresh_display()
-        elif data_type == "response.output_text.delta":
-            self.output_buffer += delta
-            self.refresh_display()
-
-    def refresh_display(self):
-        # Update your UI with separate panels
-        pass
-```
-
-This pattern enables:
-
-- **Reasoning Panel**: Shows LLM thinking process
-- **Output Panel**: Shows final response
-- **Tool Panel**: Shows tool calls and arguments
+!!! note "SDK StreamEvents are internal"
+    SDK streaming events (text deltas, reasoning deltas, tool call events) are consumed internally by `ExecutionSpec` and are **not** forwarded to handlers. Handlers receive only `AgentResult` with the full output.
 
 ## Async Handlers
 
@@ -149,37 +86,44 @@ Handlers can be async:
 
 ```python
 async def async_handler(event):
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        await some_async_operation(event.data.delta)
+    if isinstance(event, af.AgentResult):
+        await some_async_operation(event.content)
 ```
 
 AF detects async handlers and awaits them.
 
-## Streaming Without Handler
+## Without Handler
 
-If no handler is set, `.stream()` still works — it just doesn't output anywhere:
+If no handler is set (and no ChatKit context), output is printed to stdout via `print()`:
 
 ```python
-# No handler — streaming happens internally but no display
+# No handler — output is printed to stdout
 runner = af.Runner(flow=my_flow)
 result = await runner("Hello")
+# Each agent result is printed automatically
 ```
 
-The agent still runs in streaming mode, which may affect behavior (e.g., reasoning display).
+## Silent Mode
 
-## Silent Streaming
-
-Combine `.silent()` with `.stream()` for internal streaming without display:
+`.silent()` suppresses all display — no handler calls, no ChatKit events, no print output:
 
 ```python
 async with af.phase("Background"):
-    # Streams internally but suppresses handler/UI output
+    # Executes but produces no display output
     result = await agent("task").stream().silent()
 ```
 
-## Reasoning Display
+!!! note "Phase label still displays"
+    `.silent()` controls visibility at the agent call level. The `phase()` label itself is a UX boundary and still displays in ChatKit.
 
-With `ModelSettings` containing reasoning, streaming emits `response.reasoning_summary_text.delta` events:
+    ```python
+    async with af.phase("Research"):  # Label appears in UI
+        r = await agent(msg).silent().stream()  # Output hidden
+    ```
+
+## Reasoning with ChatKit
+
+Reasoning display (step-by-step thinking) is available through ChatKit's workflow boundaries. Each `phase()` creates a workflow in ChatKit that can display reasoning separately from output:
 
 ```python
 import agentic_flow as af
@@ -191,36 +135,17 @@ agent = af.Agent(
     model_settings=af.reasoning("medium"),  # Helper for reasoning config
 )
 
-# Reasoning steps appear as separate event type
+# In ChatKit mode, reasoning steps appear in workflow display
+# In CLI mode, only the final AgentResult is delivered to handler
 result = await agent("Complex problem").stream()
 ```
 
-To display reasoning separately from output:
-
-```python
-def reasoning_aware_handler(event):
-    if getattr(event, "type", None) != "raw_response_event":
-        return
-
-    data = getattr(event, "data", None)
-    if not data:
-        return
-
-    data_type = getattr(data, "type", "")
-    delta = getattr(data, "delta", "")
-
-    if data_type == "response.reasoning_summary_text.delta":
-        # Display in reasoning panel (dimmed, separate area)
-        print(f"\033[2m{delta}\033[0m", end="", flush=True)
-    elif data_type == "response.output_text.delta":
-        # Display in main output area
-        print(delta, end="", flush=True)
-```
+For CLI applications, the handler receives `AgentResult` with the final output only. Reasoning steps are consumed internally and not exposed to the handler.
 
 ## Complete Example
 
 ```python
-import agentic_flow as af, af.PhaseStarted, af.PhaseEnded
+import agentic_flow as af
 
 researcher = af.Agent(
     name="researcher",
@@ -245,8 +170,8 @@ def cli_handler(event):
         print(f"\n--- /{event.label} ({event.elapsed_ms}ms) ---\n")
         return
 
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+    if isinstance(event, af.AgentResult):
+        print(event.content)
 
 
 async def research_flow(message: str) -> str:

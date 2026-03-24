@@ -6,14 +6,14 @@ Advanced patterns for building rich command-line interfaces with AF.
 
 CLI applications need more than simple text output. This guide covers:
 
-- Multi-panel layouts (reasoning, output, tools)
+- Phase-aware display with Rich panels
 - Content-type aware rendering (text, markdown, JSON)
-- Incremental JSON parsing for tool arguments
+- Multi-phase formatting
 - Live updating displays
 
-## StreamRenderer Pattern
+## ContentRenderer Pattern
 
-Buffer streaming content with content-type awareness:
+Render agent output with content-type awareness:
 
 ```python
 import json
@@ -21,119 +21,66 @@ from typing import Literal
 
 ContentType = Literal["text", "markdown", "json"]
 
-class StreamRenderer:
-    """Content-type aware stream renderer."""
+class ContentRenderer:
+    """Content-type aware renderer for agent output."""
 
     def __init__(self, content_type: ContentType = "text"):
         self.buffer = ""
         self.content_type = content_type
-        self.json_decoder = json.JSONDecoder()
-        self.last_valid_json = None
 
     def clear(self):
         """Reset buffer state."""
         self.buffer = ""
-        self.last_valid_json = None
 
-    def append(self, delta: str):
-        """Append delta and parse if JSON."""
-        self.buffer += delta
-        if self.content_type == "json":
-            self.try_parse_json()
-
-    def try_parse_json(self):
-        """Incremental JSON parsing with raw_decode.
-
-        Handles:
-        - Complete JSON objects
-        - Incomplete JSON (waits for more data)
-        - NDJSON (multiple objects)
-        """
-        buf = self.buffer.strip()
-        if not buf:
-            return
-
-        try:
-            obj, _ = self.json_decoder.raw_decode(buf)
-            self.last_valid_json = obj
-        except json.JSONDecodeError:
-            pass  # Wait for more data
+    def set_content(self, content: str):
+        """Set full content from AgentResult."""
+        self.buffer = content
 
     def render(self) -> str:
         """Render based on content type."""
-        if self.content_type == "json" and self.last_valid_json:
-            return json.dumps(self.last_valid_json, indent=2)
+        if self.content_type == "json":
+            try:
+                parsed = json.loads(self.buffer)
+                return json.dumps(parsed, indent=2)
+            except json.JSONDecodeError:
+                return self.buffer
         return self.buffer
 ```
 
-## Multi-Panel Handler
+## Multi-Phase Handler
 
-Route events to separate display areas:
+Route events to display with phase context:
 
 ```python
-class MultiPanelHandler:
-    """Handler with separate reasoning, output, and tool panels."""
+import agentic_flow as af
+
+
+class MultiPhaseHandler:
+    """Handler that formats output per phase."""
 
     def __init__(self):
-        self.reasoning = StreamRenderer("text")
-        self.output = StreamRenderer("text")
-        self.tools: list[str] = []
+        self.current_phase: str | None = None
+        self.phase_results: dict[str, str] = {}
 
     def __call__(self, event):
-        import agentic_flow as af
-
         # Phase boundaries
         if isinstance(event, af.PhaseStarted):
-            self.on_phase_start(event.label)
+            self.current_phase = event.label
+            print(f"\n[{event.label}]")
             return
+
         if isinstance(event, af.PhaseEnded):
-            self.on_phase_end(event.label, event.elapsed_ms)
+            print(f"[/{event.label}] ({event.elapsed_ms}ms)")
+            self.current_phase = None
             return
 
-        # SDK streaming events
-        if getattr(event, "type", None) != "raw_response_event":
+        # Agent result — full text delivered once
+        if isinstance(event, af.AgentResult):
+            content = str(event.content)
+            if self.current_phase:
+                self.phase_results[self.current_phase] = content
+            print(content)
             return
-
-        data = getattr(event, "data", None)
-        if not data:
-            return
-
-        data_type = getattr(data, "type", "")
-        delta = getattr(data, "delta", "")
-
-        if data_type == "response.reasoning_summary_text.delta":
-            self.reasoning.append(delta)
-            self.refresh()
-        elif data_type == "response.output_text.delta":
-            self.output.append(delta)
-            self.refresh()
-        elif data_type == "response.function_call_arguments.delta":
-            self.output.append(delta)
-            self.refresh()
-        elif data_type == "response.output_item.added":
-            item = getattr(data, "item", None)
-            if item and getattr(item, "type", "") == "function_call":
-                tool_name = getattr(item, "name", "tool")
-                self.on_tool_start(tool_name)
-
-    def on_phase_start(self, label: str):
-        """Clear buffers for new phase."""
-        self.reasoning.clear()
-        self.output.clear()
-
-    def on_phase_end(self, label: str, elapsed_ms: int):
-        """Phase completed."""
-        pass
-
-    def on_tool_start(self, tool_name: str):
-        """New tool call - switch output to JSON mode."""
-        self.output.clear()
-        self.output.content_type = "json"
-        self.tools.append(tool_name)
-
-    def refresh(self):
-        """Update display - implement with your UI library."""
-        pass
 ```
 
 ## Rich Library Integration
@@ -144,86 +91,57 @@ Using Rich for beautiful terminal output:
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
-from rich.json import JSON as RichJSON
 from rich.markdown import Markdown
-from rich.syntax import Syntax
 from rich.text import Text
 
-class RichStreamRenderer:
-    """Rich-aware stream renderer."""
-
-    def __init__(self, content_type: ContentType = "text"):
-        self.buffer = ""
-        self.content_type = content_type
-        self.json_decoder = json.JSONDecoder()
-        self.last_valid_json = None
-
-    def render(self):
-        """Render to Rich renderable."""
-        if not self.buffer.strip():
-            return Text.from_markup("[dim]...[/dim]")
-
-        if self.content_type == "text":
-            return Text(self.buffer)
-        elif self.content_type == "markdown":
-            return Markdown(self.buffer)
-        elif self.content_type == "json":
-            if self.last_valid_json is not None:
-                return RichJSON.from_data(self.last_valid_json)
-            return Syntax(self.buffer, "json", word_wrap=True)
-
-        return Text(self.buffer)
+import agentic_flow as af
 
 
-class RichDisplay:
-    """Multi-panel Rich display."""
+class RichPhaseDisplay:
+    """Rich display with per-phase panels."""
 
     def __init__(self, console: Console):
         self.console = console
-        self.reasoning = RichStreamRenderer("text")
-        self.output = RichStreamRenderer("text")
-        self.live: Live | None = None
+        self.current_phase: str | None = None
+        self.phase_outputs: list[tuple[str, str]] = []
+        self.pending_output: str = ""
 
-    def start(self):
-        """Start live display."""
-        self.live = Live(self.build(), console=self.console, refresh_per_second=4)
-        self.live.start()
+    def handler(self, event):
+        """Event handler for Rich display."""
+        if isinstance(event, af.PhaseStarted):
+            self.current_phase = event.label
+            self.pending_output = ""
+            return
 
-    def stop(self):
-        """Stop live display."""
-        if self.live:
-            self.live.stop()
-            self.live = None
+        if isinstance(event, af.PhaseEnded):
+            if self.pending_output:
+                self.phase_outputs.append((event.label, self.pending_output))
+                self.console.print(Panel(
+                    Markdown(self.pending_output)
+                    if self.looks_like_markdown(self.pending_output)
+                    else Text(self.pending_output),
+                    title=f"[bold]{event.label}[/bold] ({event.elapsed_ms}ms)",
+                    border_style="cyan",
+                ))
+            self.current_phase = None
+            return
 
-    def update(self):
-        """Refresh display."""
-        if self.live:
-            self.live.update(self.build())
+        if isinstance(event, af.AgentResult):
+            self.pending_output = str(event.content)
+            return
 
-    def build(self) -> Group:
-        """Build multi-panel layout."""
-        panels = []
-
-        if self.reasoning.buffer.strip():
-            panels.append(Panel(
-                self.reasoning.render(),
-                title="[bold]Reasoning[/bold]",
-                border_style="dim",
-            ))
-
-        panels.append(Panel(
-            self.output.render(),
-            title="[bold]Output[/bold]",
-            border_style="cyan",
-        ))
-
-        return Group(*panels)
+    @staticmethod
+    def looks_like_markdown(text: str) -> bool:
+        """Simple heuristic for markdown detection."""
+        markers = ["# ", "## ", "- ", "* ", "```", "**", "["]
+        return any(marker in text for marker in markers)
 ```
 
 ## Complete Example
 
 ```python
 import agentic_flow as af
+from rich.console import Console
 
 # Agents
 researcher = af.Agent(
@@ -234,40 +152,8 @@ researcher = af.Agent(
 )
 
 # Rich display
-from rich.console import Console
-
 console = Console()
-display = RichDisplay(console)
-
-def rich_handler(event):
-    import agentic_flow as af
-
-    if isinstance(event, af.PhaseStarted):
-        display.reasoning.buffer = ""
-        display.output.buffer = ""
-        display.start()
-        return
-
-    if isinstance(event, af.PhaseEnded):
-        display.stop()
-        return
-
-    if getattr(event, "type", None) != "raw_response_event":
-        return
-
-    data = getattr(event, "data", None)
-    if not data:
-        return
-
-    data_type = getattr(data, "type", "")
-    delta = getattr(data, "delta", "")
-
-    if data_type == "response.reasoning_summary_text.delta":
-        display.reasoning.buffer += delta
-        display.update()
-    elif data_type == "response.output_text.delta":
-        display.output.buffer += delta
-        display.update()
+display = RichPhaseDisplay(console)
 
 
 async def research_flow(message: str) -> str:
@@ -275,7 +161,7 @@ async def research_flow(message: str) -> str:
         return await researcher(message).stream()
 
 
-runner = af.Runner(flow=research_flow, handler=rich_handler)
+runner = af.Runner(flow=research_flow, handler=display.handler)
 
 if __name__ == "__main__":
     result = runner.run_sync("Explain quantum computing")

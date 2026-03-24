@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -42,14 +43,15 @@ def handler_log():
     return handler
 
 
-@pytest.fixture
-def text_collector():
-    texts = []
+class Analysis(BaseModel):
+    """Sentiment analysis result."""
 
-    def handler(event):
-        if hasattr(event, "data") and hasattr(event.data, "delta"):
-            texts.append(event.data.delta)
+    sentiment: str
+    score: float
 
-    handler.texts = texts
-    handler.get_text = lambda: "".join(texts)
-    return handler
+
+class Decision(BaseModel):
+    """Decision result."""
+
+    action: str
+    reason: str

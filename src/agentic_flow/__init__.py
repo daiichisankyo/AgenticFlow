@@ -4,7 +4,7 @@ agent(prompt) returns an ExecutionSpec[T].
 Execution happens only when the resulting spec is awaited (returns T).
 
 Modifiers (organized by axis):
-- WHERE: .isolated() - No Session/PhaseSession
+- WHERE: .isolated(), .snapshot() - Context control
 - HOW: .stream(), .silent() - Streaming, UI suppression
 - LIMITS: .max_turns(n) - Execution constraints
 - SDK: .run_config(), .context(), .run_kwarg() - SDK pass-through
@@ -52,6 +52,9 @@ Context behavior:
 
     # isolated(): No context at all
     await agent("prompt").isolated()  # No Session, no PhaseSession
+
+    # snapshot(): Read-only context (safe for asyncio.gather)
+    await agent("prompt").snapshot()  # Reads context, doesn't write
 """
 
 from .agent import Agent, ExecutionSpec

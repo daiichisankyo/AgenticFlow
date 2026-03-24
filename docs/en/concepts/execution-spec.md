@@ -16,10 +16,11 @@ This spec captures:
 |:---------|:------------|:-----------|:-----|
 | `sdk_agent` | The underlying SDK Agent | At creation | WHAT |
 | `input` | The prompt string | At creation | WHAT |
-| `streaming` | Whether to stream events | Via `.stream()` | HOW |
+| `is_streaming` | Whether to stream events | Via `.stream()` | HOW |
 | `is_silent` | Whether to suppress UI | Via `.silent()` | HOW |
 | `is_isolated` | Whether to ignore context | Via `.isolated()` | WHERE |
-| `max_turns_sdk` | Execution turn limit | Via `.max_turns(n)` | LIMITS |
+| `is_snapshot` | Whether to use read-only context | Via `.snapshot()` | WHERE |
+| `max_turns_limit` | Execution turn limit | Via `.max_turns(n)` | LIMITS |
 | `run_kwargs` | SDK pass-through parameters | Via modifiers | Various |
 
 ## What ExecutionSpec Doesn't Capture
@@ -66,9 +67,9 @@ Modifiers don't execute — they return a new `ExecutionSpec` with updated flags
 
 ```python
 spec1 = assistant("Hello")           # ExecutionSpec[str]
-spec2 = spec1.stream()               # ExecutionSpec[str] with streaming=True
+spec2 = spec1.stream()               # ExecutionSpec[str] with is_streaming=True
 spec3 = spec2.silent()               # ExecutionSpec[str] with is_silent=True
-spec4 = spec3.max_turns(5)      # ExecutionSpec[str] with max_turns_sdk=5
+spec4 = spec3.max_turns(5)      # ExecutionSpec[str] with max_turns_limit=5
 
 # spec1, spec2, spec3, spec4 are all unexecuted
 ```
@@ -77,10 +78,10 @@ Internally, modifiers use `dataclasses.replace`:
 
 ```python
 def stream(self) -> ExecutionSpec[T]:
-    return replace(self, streaming=True)
+    return replace(self, is_streaming=True)
 
 def max_turns(self, max_turns: int) -> ExecutionSpec[T]:
-    return replace(self, max_turns_sdk=max_turns)
+    return replace(self, max_turns_limit=max_turns)
 ```
 
 ## Execution
@@ -106,7 +107,9 @@ At execution time, `ExecutionSpec` resolves context in this order:
 ```mermaid
 graph TD
     A(".isolated()?") -->|"Yes"| B("No context — stateless")
-    A -->|"No"| C("In phase?")
+    A -->|"No"| A2(".snapshot()?")
+    A2 -->|"Yes"| B2("Read-only context — no writes")
+    A2 -->|"No"| C("In phase?")
     C -->|"Yes"| D("Use PhaseSession")
     C -->|"No"| E("Use Session")
 ```
@@ -116,6 +119,7 @@ graph TD
 | Outside phase | Yes | Yes (SDK) | No |
 | Inside phase | Inherited | No | Yes |
 | `phase(persist=True)` | Inherited | At phase end | Yes |
+| `.snapshot()` | Yes | No | Read-only |
 | `.isolated()` | No | No | No |
 
 !!! info "Accessing Context Explicitly"
@@ -123,20 +127,26 @@ graph TD
 
 ## Streaming Execution
 
-When `streaming=True`, execution uses `Runner.run_streamed`:
+When `is_streaming=True`, execution uses `Runner.run_streamed` internally for faster first-token latency. The stream is consumed internally — delta events are **not** forwarded to the handler. Display is always full-text-at-once via `AgentResult`:
 
 ```python
 async def execute_streaming(self, input_data, session) -> T:
     stream = Runner.run_streamed(self.sdk_agent, input_data, session=session)
 
-    async for event in stream.stream_events():
-        if handler and not self.is_silent:
-            handler(event)
+    # Consume stream internally — delta events NOT forwarded
+    async for _event in stream.stream_events():
+        pass
 
-    return stream.final_output
+    output = stream.final_output
+
+    # Display fallback: ChatKit > Handler > print (mutually exclusive)
+    if not self.is_silent:
+        handler(AgentResult(content=output))
+
+    return output
 ```
 
-Events are forwarded to the handler unless `.silent()` is set.
+`.stream()` controls **internal execution mode**, not display. Both streaming and non-streaming paths emit `AgentResult` for display.
 
 ## SDK Pass-Through Modifiers
 
@@ -156,7 +166,7 @@ result = await agent("prompt").run_config(
 
 # Override model for this execution
 result = await agent("prompt").run_config(
-    RunConfig(model="gpt-5.2-turbo")
+    RunConfig(model="gpt-5.2")
 )
 
 # Set workflow name for tracing
@@ -215,7 +225,7 @@ result = await agent("complex task") \
 `ExecutionSpec` embodies Call-Spec discipline:
 
 - **Declaration**: Created by `agent(prompt)` — captures what to do
-- **Modifiers**: `.stream()`, `.silent()`, `.isolated()`, `.max_turns(n)` — configure how
+- **Modifiers**: `.stream()`, `.silent()`, `.isolated()`, `.snapshot()`, `.max_turns(n)` — configure how
 - **SDK Pass-through**: `.run_config()`, `.context()`, `.run_kwarg()` — SDK parameters
 - **Execution**: `await` — runs the agent
 - **Context**: Resolved at execution time — not bound at creation

@@ -80,6 +80,55 @@ result = await runner(query)
 
 ---
 
+## 🆕 New: `.snapshot()` — Parallel Agents That Actually Know What's Going On
+
+Ever tried running agents in parallel with `asyncio.gather()`? You probably hit this tradeoff:
+
+| | Knows Context | Parallel-Safe |
+|---|:---:|:---:|
+| Default | ✅ | ❌ Race conditions! |
+| `.isolated()` | ❌ Amnesia... | ✅ |
+| **`.snapshot()`** | **✅** | **✅ Best of both!** |
+
+`.snapshot()` gives each agent a **read-only snapshot** of the conversation — they see everything that happened before, but their responses don't interfere with each other.
+
+```python
+async with af.phase("Parallel Analysis", persist=True):
+    # 3 agents, 1 context, 0 race conditions
+    sentiment, entities, summary = await asyncio.gather(
+        sentiment_agent(data).snapshot(),   # ← reads context
+        entity_agent(data).snapshot(),      # ← reads context
+        summary_agent(data).snapshot(),     # ← reads context
+    )
+    # All three see the same conversation history.
+    # None of them write to it. No conflicts. Just works.
+```
+
+> **TL;DR:** `.isolated()` = no memory, `.snapshot()` = read-only memory, default = full read/write.
+> Pick the right one for your use case. [Learn more →](https://daiichisankyo.github.io/AgenticFlow/concepts/modifiers/)
+
+---
+
+## 🆕 New: Multi-Provider Support
+
+Use any LLM provider through the SDK's built-in multi-provider system:
+
+```python
+# OpenAI (default)
+openai_agent = af.Agent(name="openai", model="gpt-5.2", instructions="...")
+
+# Anthropic via LiteLLM
+claude_agent = af.Agent(name="claude", model="litellm/anthropic/claude-sonnet-4-20250514", instructions="...")
+
+# Runtime model switch
+from agents import RunConfig
+result = await agent("prompt").run_config(RunConfig(model="gpt-5.2")).stream()
+```
+
+No AF-specific configuration needed — the SDK handles provider routing via model name prefixes. See [Multi-Provider Guide](https://daiichisankyo.github.io/AgenticFlow/guides/multi-provider/).
+
+---
+
 ## 📋 Requirements
 
 - Python 3.12+
@@ -163,7 +212,7 @@ article = await runner("quantum computing")
 AF is built on three primitives:
 
 - **Agent** - Callable wrapper around SDK Agent. Returns `ExecutionSpec` for deferred execution.
-- **ExecutionSpec** - Lazy specification configured with modifiers (`.stream()`, `.isolated()`, `.silent()`, `.max_turns()`)
+- **ExecutionSpec** - Lazy specification configured with modifiers (`.stream()`, `.isolated()`, `.snapshot()`, `.silent()`, `.max_turns()`)
 - **phase** - Context manager for workflow boundaries. Controls session persistence with `persist=True`.
 
 For details, see [Concepts](https://daiichisankyo.github.io/AgenticFlow/concepts/).
@@ -233,18 +282,18 @@ import asyncio
 
 async def parallel_analysis(data: str) -> dict:
     # persist=True saves the final response to session
-    # isolated() runs each agent without shared context
+    # snapshot() reads phase context but doesn't write (concurrent-safe)
     async with af.phase("Parallel Analysis", persist=True):
-        results = await asyncio.gather(
-            sentiment_agent(data).isolated(),
-            entity_agent(data).isolated(),
-            summary_agent(data).isolated(),
+        sentiment, entities, summary = await asyncio.gather(
+            sentiment_agent(data).snapshot(),
+            entity_agent(data).snapshot(),
+            summary_agent(data).snapshot(),
         )
 
     return {
-        "sentiment": results[0],
-        "entities": results[1],
-        "summary": results[2],
+        "sentiment": sentiment,
+        "entities": entities,
+        "summary": summary,
     }
 ```
 

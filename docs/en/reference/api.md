@@ -76,14 +76,16 @@ Awaitable execution specification. Created by `agent(prompt)`.
 class ExecutionSpec(Generic[T]):
     sdk_agent: SDKAgent
     input: str = ""
-    streaming: bool = False
+    is_streaming: bool = False
     is_isolated: bool = False
+    is_snapshot: bool = False
     is_silent: bool = False
-    max_turns_sdk: int | None = None
+    max_turns_limit: int | None = None
     run_kwargs: dict[str, Any] = field(default_factory=dict)
 
     # WHERE axis
     def isolated(self) -> ExecutionSpec[T]: ...
+    def snapshot(self) -> ExecutionSpec[T]: ...
 
     # HOW axis
     def stream(self) -> ExecutionSpec[T]: ...
@@ -105,6 +107,7 @@ class ExecutionSpec(Generic[T]):
 | Method | Returns | Axis | Description |
 |:-------|:--------|:-----|:------------|
 | `isolated()` | `ExecutionSpec[T]` | WHERE | Execute without context |
+| `snapshot()` | `ExecutionSpec[T]` | WHERE | Read-only context snapshot |
 | `stream()` | `ExecutionSpec[T]` | HOW | Enable streaming mode |
 | `silent()` | `ExecutionSpec[T]` | HOW | Suppress UI display |
 | `max_turns(n)` | `ExecutionSpec[T]` | LIMITS | Limit execution turns |
@@ -117,7 +120,7 @@ class ExecutionSpec(Generic[T]):
 
 ```python
 spec = assistant("Hello")           # ExecutionSpec[str]
-spec = spec.stream()                # ExecutionSpec[str] with streaming
+spec = spec.stream()                # ExecutionSpec[str] with is_streaming=True
 result = await spec                 # str
 
 # With SDK pass-through
@@ -321,7 +324,7 @@ import agentic_flow as af
 Union type for all events:
 
 ```python
-Event = Union[StreamEvent, PhaseStarted, PhaseEnded, AgentResult]
+Event = PhaseStarted | PhaseEnded | AgentResult
 ```
 
 ### PhaseStarted
@@ -363,45 +366,32 @@ Handler = Callable[[Event], Any]
 
 ---
 
-## SDK StreamEvent Types
+## Handler Events
 
-AF forwards SDK streaming events wrapped in `raw_response_event`. Access via `event.data.type`:
+Handler receives AF events only. SDK streaming deltas are consumed internally and **not** forwarded to the handler. Display is always full-text-at-once.
 
-| Event Type | Description | Attributes |
-|:-----------|:------------|:-----------|
-| `response.output_text.delta` | Text output chunk | `delta: str` |
-| `response.reasoning_summary_text.delta` | Reasoning summary chunk | `delta: str` |
-| `response.function_call_arguments.delta` | Tool arguments (JSON) | `delta: str` |
-| `response.output_item.added` | New output item | `item: {type, name}` |
-| `response.output_item.done` | Output item complete | `item: {...}` |
+**Events the handler receives:**
 
-**Example: Event Routing**
+| Event | When | Key Fields |
+|:------|:-----|:-----------|
+| `AgentResult` | After each agent execution | `content: Any` (full output) |
+| `PhaseStarted` | On `phase()` entry | `label: str` |
+| `PhaseEnded` | On `phase()` exit | `label: str`, `elapsed_ms: int` |
+
+**Display fallback:** ChatKit > Handler > `print()` (mutually exclusive).
+
+**Example: Handler**
 
 ```python
+import agentic_flow as af
+
 def handler(event):
-    if getattr(event, "type", None) != "raw_response_event":
-        # Handle AF events (af.PhaseStarted, af.PhaseEnded, etc.)
-        return
-
-    data = getattr(event, "data", None)
-    if not data:
-        return
-
-    match getattr(data, "type", ""):
-        case "response.output_text.delta":
-            # Main text output
-            pass
-        case "response.reasoning_summary_text.delta":
-            # Reasoning (separate display recommended)
-            pass
-        case "response.function_call_arguments.delta":
-            # Tool call arguments (JSON fragments)
-            pass
-        case "response.output_item.added":
-            # New tool call started
-            item = getattr(data, "item", None)
-            if item and getattr(item, "type", "") == "function_call":
-                tool_name = getattr(item, "name", "")
+    if isinstance(event, af.PhaseStarted):
+        print(f"\n[{event.label}]")
+    elif isinstance(event, af.PhaseEnded):
+        print(f"  ({event.elapsed_ms}ms)")
+    elif isinstance(event, af.AgentResult):
+        print(event.content)
 ```
 
 ---

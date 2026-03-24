@@ -314,8 +314,6 @@ class TestPhaseSessionAttributeError:
 
     def test_undefined_attribute_raises_error(self):
         """Accessing undefined attribute should raise AttributeError."""
-        from agentic_flow.phase import PhaseSession
-
         ctx = PhaseSession("test")
         with pytest.raises(AttributeError) as exc_info:
             _ = ctx.undefined_attribute
@@ -323,16 +321,12 @@ class TestPhaseSessionAttributeError:
 
     def test_defined_attribute_works(self):
         """Defined attribute should work normally."""
-        from agentic_flow.phase import PhaseSession
-
         ctx = PhaseSession("test")
         ctx.my_value = "hello"
         assert ctx.my_value == "hello"
 
     def test_builtin_attributes_work(self):
         """Built-in attributes (label, items, data) should work."""
-        from agentic_flow.phase import PhaseSession
-
         ctx = PhaseSession("test_label")
         assert ctx.label == "test_label"
         assert ctx.items == []

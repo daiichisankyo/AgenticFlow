@@ -207,8 +207,8 @@ def progress_handler(event):
             print(f"\nRefining based on feedback...")
     elif isinstance(event, af.PhaseEnded):
         print(f" done ({event.elapsed_ms}ms)")
-    elif hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+    elif isinstance(event, af.AgentResult):
+        print(event.content)
 
 runner = af.Runner(
     flow=review_loop_flow,

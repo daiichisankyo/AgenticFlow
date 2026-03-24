@@ -148,8 +148,8 @@ def cli_handler(event):
         print(f"\n[{event.label}]")
     elif isinstance(event, af.PhaseEnded):
         print(f"\n[/{event.label}]")
-    elif hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+    elif isinstance(event, af.AgentResult):
+        print(event.content)
 
 runner = af.Runner(
     flow=multi_agent_flow,
@@ -160,7 +160,10 @@ runner = af.Runner(
 
 ## Parallel Research
 
-For independent research tasks, use `asyncio.gather` with `.isolated()`:
+For independent research tasks, use `asyncio.gather` with `.isolated()` or `.snapshot()`:
+
+- `.isolated()` — No context at all (stateless, cheapest)
+- `.snapshot()` — Read-only context (sees conversation history, doesn't write)
 
 ```python
 import asyncio
@@ -171,11 +174,11 @@ async def parallel_research_flow(user_message: str) -> str:
 
     if "COMPLEX" in classification.upper():
         async with af.phase("Research"):
-            # Parallel research on different aspects
+            # Parallel research — each sees phase context but doesn't write
             results = await asyncio.gather(
-                researcher(f"Technical aspects of: {user_message}").isolated(),
-                researcher(f"Practical applications of: {user_message}").isolated(),
-                researcher(f"Comparisons and alternatives for: {user_message}").isolated(),
+                researcher(f"Technical aspects of: {user_message}").snapshot(),
+                researcher(f"Practical applications of: {user_message}").snapshot(),
+                researcher(f"Comparisons and alternatives for: {user_message}").snapshot(),
             )
             research = "\n\n".join(results)
     else:
@@ -184,6 +187,10 @@ async def parallel_research_flow(user_message: str) -> str:
     async with af.phase("Response", persist=True):
         return await responder(f"Based on research:\n{research}").stream()
 ```
+
+!!! tip "When to use `.isolated()` vs `.snapshot()`"
+    Use `.isolated()` for pure transformations that don't need context (translation, formatting).
+    Use `.snapshot()` when parallel agents need to see the accumulated conversation or phase context.
 
 ---
 

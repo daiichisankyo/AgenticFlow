@@ -19,7 +19,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agents.items import TResponseInputItem
 from agents.memory.session import SessionABC
@@ -31,9 +31,6 @@ from .agent import (
 )
 from .chatkit import current_chatkit_context
 from .types import PhaseEnded, PhaseStarted
-
-if TYPE_CHECKING:
-    pass
 
 # Indicates whether execution is inside a phase (regardless of share_context)
 current_in_phase: ContextVar[bool] = ContextVar("current_in_phase", default=False)
@@ -194,12 +191,12 @@ async def phase(
     in_phase_token = current_in_phase.set(True)
 
     # Emit PhaseStarted to handler
+    from .utils import call_handler
+
     phase_started_event = PhaseStarted(label=label)
     handler = current_handler.get()
     if handler is not None:
-        result = handler(phase_started_event)
-        if hasattr(result, "__await__"):
-            await result
+        await call_handler(handler, phase_started_event)
 
     # ChatKit integration: emit phase label to create workflow boundary
     chatkit_ctx = current_chatkit_context.get()
@@ -240,9 +237,7 @@ async def phase(
         # Emit PhaseEnded to handler
         phase_ended_event = PhaseEnded(label=label, elapsed_ms=elapsed_ms)
         if handler is not None:
-            result = handler(phase_ended_event)
-            if hasattr(result, "__await__"):
-                await result
+            await call_handler(handler, phase_ended_event)
 
         # Reset in_phase flag
         current_in_phase.reset(in_phase_token)

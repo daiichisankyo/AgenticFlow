@@ -97,8 +97,12 @@ class Runner:
 
     Example:
         def my_handler(event):
-            if hasattr(event, "data") and hasattr(event.data, "delta"):
-                print(event.data.delta, end="", flush=True)
+            from agentic_flow import AgentResult, PhaseStarted
+
+            if isinstance(event, PhaseStarted):
+                print(f"\n[{event.label}]")
+            elif isinstance(event, AgentResult):
+                print(event.content)
 
         async def flow(user_message: str) -> str:
             async with phase("Research", persist=True):

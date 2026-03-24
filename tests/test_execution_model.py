@@ -12,23 +12,10 @@ All tests use real GPT API calls. No mocks.
 from __future__ import annotations
 
 import pytest
-from pydantic import BaseModel
 
 from agentic_flow import Agent, Runner, phase
-
-
-class Analysis(BaseModel):
-    """Test Pydantic model for typed output."""
-
-    sentiment: str
-    score: float
-
-
-class Decision(BaseModel):
-    """Test Pydantic model for control flow."""
-
-    action: str
-    reason: str
+from agentic_flow.types import AgentResult
+from tests.conftest import Analysis, Decision
 
 
 class TestExecutionSpecT:
@@ -79,7 +66,7 @@ class TestExecutionSpecT:
         spec = agent("test")
 
         assert spec.input == "test"
-        assert spec.streaming is False
+        assert spec.is_streaming is False
         assert spec.is_isolated is False
 
         result = await spec
@@ -119,7 +106,7 @@ class TestExecutionTriggers:
 
     @pytest.mark.asyncio
     async def test_stream_returns_str(self, handler_log):
-        """await agent().stream() returns str and streams events."""
+        """await agent().stream() returns str and emits AgentResult."""
         agent = Agent(
             name="stream_str",
             instructions="Reply with 'STREAM OK'",
@@ -135,11 +122,13 @@ class TestExecutionTriggers:
 
         assert isinstance(result, str)
         assert "OK" in result
-        assert len(handler_log.events) > 0, "Events should be captured"
+        agent_results = [e for e in handler_log.events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Handler should receive exactly 1 AgentResult"
+        assert agent_results[0].content is not None
 
     @pytest.mark.asyncio
     async def test_stream_returns_pydantic(self, handler_log):
-        """await agent().stream() with output_type returns Pydantic and streams."""
+        """await agent().stream() with output_type returns Pydantic and emits AgentResult."""
         analyzer = Agent(
             name="stream_pydantic",
             instructions="Analyze sentiment as positive/negative with score 0-1.",
@@ -155,7 +144,9 @@ class TestExecutionTriggers:
         result = await chat("I absolutely love this!")
 
         assert isinstance(result, Analysis)
-        assert len(handler_log.events) > 0, "Events should be captured"
+        agent_results = [e for e in handler_log.events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Handler should receive exactly 1 AgentResult"
+        assert isinstance(agent_results[0].content, Analysis)
         print(f"Streamed Analysis: {result}")
 
 

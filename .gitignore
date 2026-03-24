@@ -68,8 +68,11 @@ Thumbs.db
 # Sample generated data
 /sample/agentic_flow_samples.egg-info/
 /sample/guide/data/
-/sample/memory/
+/sample/memory/data/
 
 # AgenticTranscoder (internal docs and generated output)
 /sample/agentic_transcoder/design_philosophy.md
 /sample/agentic_transcoder/workspace/
+
+# Multi Providet Test
+.models

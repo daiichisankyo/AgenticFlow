@@ -18,21 +18,15 @@ import pytest
 from pydantic import BaseModel
 
 from agentic_flow import Agent, Runner, phase, reasoning
+from tests.conftest import Decision
 
 
-class Analysis(BaseModel):
-    """Analysis result."""
+class ContentAnalysis(BaseModel):
+    """Content analysis result."""
 
     category: str
     confidence: float
     keywords: list[str]
-
-
-class Decision(BaseModel):
-    """Decision result."""
-
-    action: str
-    reason: str
 
 
 class Review(BaseModel):
@@ -52,7 +46,7 @@ class TestTypedDataTransformation:
             name="analyzer",
             instructions="Analyze input. Return category, confidence, keywords.",
             model="gpt-5.2",
-            output_type=Analysis,
+            output_type=ContentAnalysis,
         )
 
         decider = Agent(
@@ -64,7 +58,7 @@ class TestTypedDataTransformation:
 
         async def flow(user_input: str) -> str:
             async with phase("Analysis"):
-                analysis: Analysis = await analyzer(user_input).stream()
+                analysis: ContentAnalysis = await analyzer(user_input).stream()
 
             prompt = f"""
             Category: {analysis.category}
@@ -93,7 +87,7 @@ class TestTypedDataTransformation:
             name="classifier",
             instructions="Return category as 'urgent' or 'normal' with confidence 0-1.",
             model="gpt-5.2",
-            output_type=Analysis,
+            output_type=ContentAnalysis,
         )
 
         urgent_handler = Agent(
@@ -110,7 +104,7 @@ class TestTypedDataTransformation:
 
         async def flow(user_input: str) -> str:
             async with phase("Classify"):
-                analysis: Analysis = await analyzer(user_input).stream()
+                analysis: ContentAnalysis = await analyzer(user_input).stream()
 
             if analysis.category.lower() == "urgent" or analysis.confidence > 0.8:
                 async with phase("Urgent"):
@@ -131,10 +125,10 @@ class TestTypedDataTransformation:
             name="typed",
             instructions="Return category, confidence, keywords.",
             model="gpt-5.2",
-            output_type=Analysis,
+            output_type=ContentAnalysis,
         )
 
-        result: Analysis = await analyzer("Test input")
+        result: ContentAnalysis = await analyzer("Test input")
 
         category: str = result.category
         confidence: float = result.confidence
@@ -282,10 +276,34 @@ class TestControlStructures:
         print(f"Gather result: {result}")
 
     @pytest.mark.asyncio
+    async def test_asyncio_gather_with_snapshot(self, handler_log):
+        """asyncio.gather with snapshot() for parallel read-only execution."""
+        searcher = Agent(
+            name="searcher",
+            instructions="Search for information about the topic. Reply briefly.",
+            model="gpt-5.2",
+        )
+
+        async def flow(user_input: str) -> str:
+            topics = ["Python", "JavaScript", "Rust"]
+
+            results = await asyncio.gather(
+                searcher(f"Tell me about {topics[0]}").snapshot(),
+                searcher(f"Tell me about {topics[1]}").snapshot(),
+                searcher(f"Tell me about {topics[2]}").snapshot(),
+            )
+
+            return f"Found info on {len(results)} topics"
+
+        chat = Runner(flow=flow)
+        result = await chat("test")
+
+        assert "3" in result
+        print(f"Gather with snapshot result: {result}")
+
+    @pytest.mark.asyncio
     async def test_nested_loops(self, handler_log):
         """Nested loops demonstrating Python semantics."""
-        await asyncio.sleep(0.1)
-
         processor = Agent(
             name="processor",
             instructions="Process item briefly. Reply with one word.",

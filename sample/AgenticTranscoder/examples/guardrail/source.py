@@ -202,7 +202,6 @@ async def run_workflow(workflow_input: WorkflowInput):
     guardrails_input_text = workflow["input_as_text"]
     guardrails_result = await run_and_apply_guardrails(guardrails_input_text, guardrails_config, conversation_history, workflow)
     guardrails_hastripwire = guardrails_result["has_tripwire"]
-    guardrails_anonymizedtext = guardrails_result["safe_text"]
     guardrails_output = (guardrails_hastripwire and guardrails_result["fail_output"]) or guardrails_result["pass_output"]
     if guardrails_hastripwire:
       return guardrails_output
@@ -219,7 +218,3 @@ async def run_workflow(workflow_input: WorkflowInput):
       )
 
       conversation_history.extend([item.to_input_item() for item in chat_result_temp.new_items])
-
-      chat_result = {
-        "output_text": chat_result_temp.final_output_as(str)
-      }

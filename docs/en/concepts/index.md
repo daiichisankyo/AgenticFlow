@@ -145,7 +145,7 @@ result = await spec
 
 - Which agent to run
 - What prompt to send
-- How to run it (streaming, silent, isolated)
+- How to run it (streaming, silent, isolated, snapshot)
 
 **Execution happens only when:**
 
@@ -169,6 +169,7 @@ graph LR
         D(session)
         E(phase)
         F(isolated)
+        F2(snapshot)
     end
 
     subgraph HOW["HOW (Display)"]
@@ -191,7 +192,7 @@ graph LR
 | Axis | Controls | Specified At |
 |:-----|:---------|:-------------|
 | **WHAT** | Agent capabilities | `af.Agent(...)`, `agent(prompt)` |
-| **WHERE** | Data flow boundaries | `phase()`, `.isolated()`, `af.Runner(session=...)` |
+| **WHERE** | Data flow boundaries | `phase()`, `.isolated()`, `.snapshot()`, `af.Runner(session=...)` |
 | **HOW** | Display and observation | `.stream()`, `.silent()`, `af.Runner(handler=...)` |
 | **LIMITS** | Execution constraints | `.max_turns()`, `.run_config()` |
 | **WHEN** | Lifecycle observation | `af.Agent(hooks=...)`, events |
@@ -213,6 +214,7 @@ Controls where data flows:
 
 - `Session` — Global conversation history
 - `PhaseSession` — Local thinking space
+- `.snapshot()` — Read-only context (concurrent-safe)
 - `.isolated()` — No context (stateless)
 - `Context` — Dependency injection (SDK pass-through via `.context()`)
 
@@ -246,7 +248,7 @@ AgenticFlow uses Python's `contextvars` to inject these dependencies. They are p
 
 Controls how execution appears:
 
-- `.stream()` — Real-time events
+- `.stream()` — Internal streaming execution (display is full-text)
 - `.silent()` — Suppress UI
 - `handler` — Custom event processing
 - `tracing` — Execution observation (SDK pass-through via `.run_config()`)
@@ -281,6 +283,7 @@ There is exactly one way to execute an agent: `await`.
 spec = agent("prompt")
 spec = agent("prompt").stream()
 spec = agent("prompt").silent().isolated()
+spec = agent("prompt").snapshot().stream()
 
 # This executes:
 result = await spec
@@ -352,7 +355,7 @@ async with af.phase("Research"):
 |:----------|:---------------|
 | Call ≠ Execute | `agent(prompt)` returns `ExecutionSpec`, not result |
 | Single trigger | Only `await` executes |
-| Modifiers are flags | `.stream()`, `.silent()`, `.isolated()`, `.max_turns()` don't execute |
+| Modifiers are flags | `.stream()`, `.silent()`, `.isolated()`, `.snapshot()`, `.max_turns()` don't execute |
 | Boundaries are visible | `async with af.phase()` marks start/end |
 | Axes are separate | WHAT / WHERE / HOW / LIMITS / WHEN don't mix |
 

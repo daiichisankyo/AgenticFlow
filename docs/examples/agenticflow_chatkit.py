@@ -1,4 +1,4 @@
-"""Agentic Flow ChatKit Server - Minimal boilerplate."""
+"""AgenticFlow ChatKit Server - Minimal boilerplate."""
 
 from agents import SQLiteSession
 from chatkit.server import ChatKitServer

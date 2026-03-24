@@ -5,15 +5,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from agents import StreamEvent
-
-# Forward declaration for type alias (actual classes defined below)
-# Event is the union of all possible events that a Handler may receive:
-# - StreamEvent: SDK streaming events (delta, tool calls, etc.)
-# - PhaseStarted: Emitted when entering a phase
-# - PhaseEnded: Emitted when exiting a phase
-# - AgentResult: Emitted when non-streaming agent execution completes
-
 
 @dataclass(frozen=True, slots=True)
 class PhaseStarted:
@@ -36,10 +27,10 @@ class PhaseEnded:
 
 @dataclass(frozen=True, slots=True)
 class AgentResult:
-    """Emitted when agent execution completes (non-streaming).
+    """Emitted when agent execution completes (full text, once).
 
-    Streaming execution emits SDK events directly.
-    Non-streaming execution emits this event to notify UI of the result.
+    Both streaming and non-streaming paths emit this event with the full output.
+    Display is always full-text-at-once; .stream() controls internal execution mode only.
     """
 
     type: Literal["agent.result"] = "agent.result"
@@ -47,11 +38,7 @@ class AgentResult:
     ts: float = field(default_factory=time.time)
 
 
-# Event union type: all possible events that a Handler may receive
-Event = StreamEvent | PhaseStarted | PhaseEnded | AgentResult
+Event = PhaseStarted | PhaseEnded | AgentResult
 
-# Handler type: receives any Event type
-# - StreamEvent: SDK streaming events (delta, tool calls, reasoning, etc.)
-# - PhaseStarted/PhaseEnded: phase boundary events
-# - AgentResult: non-streaming execution result
+# Handler type: callback for AF events
 Handler = Callable[[Event], Any]

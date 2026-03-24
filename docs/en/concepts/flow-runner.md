@@ -120,24 +120,26 @@ Each call is independent with no conversation history.
 
 ## Handler Pattern
 
-Handlers receive streaming events:
+Handlers receive AF events (not SDK streaming deltas):
 
 ```python
-def my_handler(event):
-    # Check for text delta
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+import agentic_flow as af
 
-    # Or check event type
-    import agentic_flow as af
+def my_handler(event):
     if isinstance(event, af.PhaseStarted):
         print(f"\n[{event.label}]")
+    elif isinstance(event, af.PhaseEnded):
+        print(f"  ({event.elapsed_ms}ms)")
+    elif isinstance(event, af.AgentResult):
+        print(event.content)
 ```
 
 Handlers are called for:
 
-- SDK `StreamEvent` objects (reasoning, text delta, tool calls)
-- AF events (`af.PhaseStarted`, `af.PhaseEnded`, `af.AgentResult`)
+- `af.AgentResult` — Full-text agent output (both streaming and non-streaming paths)
+- `af.PhaseStarted` / `af.PhaseEnded` — Phase boundary events
+
+Display fallback priority: ChatKit > Handler > `print()` (mutually exclusive). When no handler or ChatKit is active, output is printed to stdout.
 
 ## Summary
 

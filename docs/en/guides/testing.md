@@ -159,7 +159,7 @@ async def test_isolated_no_session():
 
 ## Parallel Test Execution
 
-When running tests in parallel, ensure isolation:
+When running tests in parallel, ensure isolation or use snapshot:
 
 ```python
 @pytest.mark.asyncio
@@ -171,6 +171,48 @@ async def test_parallel_agents():
         agent("task 2").isolated(),
         agent("task 3").isolated(),
     )
+
+    assert len(results) == 3
+```
+
+## Testing Snapshot
+
+Verify `.snapshot()` reads context but doesn't write:
+
+```python
+@pytest.mark.asyncio
+async def test_snapshot_reads_phase_context():
+    """snapshot() should see phase context."""
+    async with af.phase("Test"):
+        await agent("setup message").stream()
+        result = await agent("read context").snapshot()
+
+    # result should reflect awareness of setup message
+    assert result is not None
+
+@pytest.mark.asyncio
+async def test_snapshot_does_not_write():
+    """snapshot() should not modify PhaseSession."""
+    async with af.phase("Test") as ps:
+        items_before = len(ps.items)
+        await agent("snapshot call").snapshot()
+        items_after = len(ps.items)
+
+    # PhaseSession should not have grown from snapshot call
+    assert items_after == items_before
+
+@pytest.mark.asyncio
+async def test_snapshot_parallel_safe():
+    """Multiple snapshot() calls can run in parallel."""
+    import asyncio
+
+    async with af.phase("Parallel"):
+        await agent("setup").stream()
+        results = await asyncio.gather(
+            agent("task A").snapshot(),
+            agent("task B").snapshot(),
+            agent("task C").snapshot(),
+        )
 
     assert len(results) == 3
 ```

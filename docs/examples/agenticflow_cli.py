@@ -1,4 +1,4 @@
-"""Agentic Flow CLI - Simple streaming handler."""
+"""AgenticFlow CLI - Simple streaming handler."""
 
 from agents import SQLiteSession
 

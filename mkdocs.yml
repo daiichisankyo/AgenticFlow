@@ -95,13 +95,16 @@ nav:
       - Modifiers: concepts/modifiers.md
       - Context Resolution: context-resolution.md
   - Guides:
+      - Multi-Provider: guides/multi-provider.md
       - Streaming: guides/streaming.md
       - ChatKit Integration: guides/chatkit.md
       - Structured Output: guides/structured-output.md
+      - CLI Patterns: guides/cli-patterns.md
       - Testing: guides/testing.md
   - Reference:
       - API: reference/api.md
       - SDK Compatibility: reference/sdk-compatibility.md
   - Examples:
+      - Multi-Provider Examples: examples/multi-provider.md
       - Multi-Agent Workflow: examples/multi-agent.md
       - Review Loop: examples/review-loop.md

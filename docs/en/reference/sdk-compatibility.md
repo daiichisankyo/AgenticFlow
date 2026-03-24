@@ -7,7 +7,7 @@ AF is built on top of the [OpenAI Agents SDK](https://openai.github.io/openai-ag
 **AF does not reinvent the SDK.** It adds:
 
 - Callable form for agents (`agent(prompt)`)
-- Execution modifiers (`.stream()`, `.silent()`, `.isolated()`)
+- Execution modifiers (`.stream()`, `.silent()`, `.isolated()`, `.snapshot()`)
 - Automatic boundary management (`phase()`)
 - Session injection via Runner
 
@@ -56,7 +56,7 @@ This means:
 | Streaming | `agents.Runner.run_streamed` | Used when `.stream()` |
 | Session | `agents.Session` | Injected by Runner |
 | SQLiteSession | `agents.SQLiteSession` | Passed to Runner |
-| StreamEvent | `agents.StreamEvent` | Forwarded to Handler |
+| StreamEvent | `agents.StreamEvent` | Consumed internally (not forwarded to Handler) |
 | ModelSettings | `agents.ModelSettings` | Passed through |
 
 ## What AF Adds
@@ -70,6 +70,7 @@ This means:
 | `.stream()` | Streaming mode modifier |
 | `.silent()` | Display suppression modifier |
 | `.isolated()` | Context isolation modifier |
+| `.snapshot()` | Read-only context modifier |
 
 ## Session Compatibility
 
@@ -87,39 +88,33 @@ Session methods used:
 - `get_items()` — Read history (by phase for inheritance)
 - `add_items()` — Write history (by phase with `persist=True`)
 
-## StreamEvent Handling
+## Handler Events
 
-SDK StreamEvents are forwarded unchanged via `raw_response_event`:
+SDK StreamEvent deltas are consumed internally by `execute()` and `execute_streaming()`. They are **not** forwarded to the handler. Display is always full-text-at-once.
+
+Handler receives AF events only:
 
 ```python
+import agentic_flow as af
+
 def my_handler(event):
-    # AF events
-    if isinstance(event, (af.PhaseStarted, af.PhaseEnded, af.AgentResult)):
-        return
-
-    # SDK events wrapped in raw_response_event
-    if getattr(event, "type", None) == "raw_response_event":
-        data = getattr(event, "data", None)
-        data_type = getattr(data, "type", "")
-
-        # Route by event type
-        if data_type == "response.output_text.delta":
-            print(data.delta, end="", flush=True)
+    if isinstance(event, af.PhaseStarted):
+        print(f"\n[{event.label}]")
+    elif isinstance(event, af.PhaseEnded):
+        print(f"  ({event.elapsed_ms}ms)")
+    elif isinstance(event, af.AgentResult):
+        print(event.content)
 ```
 
-### SDK Event Types
+### AF Event Types
 
-| Event Type | Description | Source |
-|:-----------|:------------|:-------|
-| `response.output_text.delta` | Text output | OpenAI Responses API |
-| `response.reasoning_summary_text.delta` | Reasoning summary | OpenAI Responses API |
-| `response.function_call_arguments.delta` | Tool arguments | OpenAI Responses API |
-| `response.output_item.added` | New output item | OpenAI Responses API |
-| `response.output_item.done` | Output complete | OpenAI Responses API |
+| Event | When Emitted | Key Fields |
+|:------|:-------------|:-----------|
+| `AgentResult` | After each agent execution | `content: Any` (full output) |
+| `PhaseStarted` | On `phase()` entry | `label: str` |
+| `PhaseEnded` | On `phase()` exit | `label: str`, `elapsed_ms: int` |
 
-These are from the OpenAI Responses API, forwarded by the Agents SDK, and passed through by AF.
-
-AF adds its own events (`af.PhaseStarted`, `af.PhaseEnded`, `af.AgentResult`) but doesn't modify SDK events.
+Display fallback priority: ChatKit > Handler > `print()` (mutually exclusive). When no handler or ChatKit context is active, output is printed to stdout.
 
 ## Tool and Handoff Support
 
@@ -158,12 +153,37 @@ agent = af.Agent(
 )
 ```
 
+## Multi-Provider Support
+
+AF supports multiple LLM providers through the SDK's built-in multi-provider system.
+
+### Quick Start
+
+| Provider | Agent Definition |
+|:---------|:-----------------|
+| OpenAI (default) | `af.Agent(model="gpt-5.2")` |
+| Anthropic (via LiteLLM) | `af.Agent(model="litellm/anthropic/claude-sonnet-4-20250514")` |
+| Google (via LiteLLM) | `af.Agent(model="litellm/google/gemini-2.0-flash")` |
+| Custom | `RunConfig(model_provider=MyProvider())` |
+
+### Runtime Override
+
+```python
+from agents import RunConfig
+
+result = await agent("prompt").run_config(
+    RunConfig(model="gpt-5.2")
+).stream()
+```
+
+For details, see the [Multi-Provider Guide](../guides/multi-provider.md).
+
 ## Version Compatibility
 
 AF is tested with:
 
-- `openai-agents` >= 0.1.0
-- `openai-chatkit` >= 0.1.0 (for ChatKit integration)
+- `openai-agents` >= 0.3.2
+- `openai-chatkit` >= 1.4.0, < 2 (for ChatKit integration)
 
 For production, pin versions:
 
@@ -171,8 +191,8 @@ For production, pin versions:
 [project]
 dependencies = [
     "agentic-flow>=0.35",
-    "openai-agents==0.1.0",
-    "openai-chatkit==0.1.0",
+    "openai-agents>=0.3.2",
+    "openai-chatkit>=1.4.0,<2",
 ]
 ```
 
@@ -227,6 +247,7 @@ result = await agent("complex task") \
 | SDK Feature | AF Support | Notes |
 |:------------|:-------------------|:------|
 | Agent definition | Full pass-through | All Agent kwargs supported |
+| Multi-Provider | Via SDK `ModelProvider` | Use `model="litellm/..."` or `RunConfig(model_provider=...)` |
 | Runner.run() params | Via modifiers | `.max_turns()`, `.context()`, etc. |
 | Guardrails | Pass-through | Via af.Agent() or RunConfig |
 | AgentHooks | Pass-through | Via af.Agent(hooks=...) |
@@ -251,6 +272,7 @@ Things AF intentionally does not do:
 | Wrap guardrails | Use SDK directly |
 | Wrap hooks | Use SDK directly |
 | Custom tracing | Use SDK tracing |
+| Custom provider abstraction | SDK provides `ModelProvider` and `MultiProvider` |
 
 ## Architecture
 
