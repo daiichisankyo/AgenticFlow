@@ -6,8 +6,8 @@ Modifiers configure execution behavior without triggering execution. They return
 
 | Axis | Modifiers | Purpose |
 |:-----|:----------|:--------|
-| WHERE | `.isolated()` | Ignore all context |
-| HOW | `.stream()`, `.silent()` | Control display |
+| WHERE | `.isolated()`, `.snapshot()` | Context control |
+| HOW | `.stream()`, `.silent()` | Control execution mode and display |
 | LIMITS | `.max_turns(n)` | Limit execution |
 | SDK | `.run_config()`, `.context()`, `.run_kwarg()` | SDK parameters |
 
@@ -33,18 +33,71 @@ result = await translator("Hello").isolated()
 **Use cases:**
 
 - Pure transformations (translation, formatting)
-- Parallel execution (`asyncio.gather`)
 - Temporary evaluation
 - Stateless operations
 
 ```python
-# Safe parallel execution
-results = await asyncio.gather(
-    search("topic A").isolated(),
-    search("topic B").isolated(),
-    search("topic C").isolated(),
-)
+# Pure transformation — no context needed
+result = await translator("Bonjour le monde").isolated()
 ```
+
+!!! tip "For parallel execution, prefer `.snapshot()`"
+    `.isolated()` is concurrent-safe but provides no context. For parallel agents that need conversation history, use [`.snapshot()`](#snapshot) instead.
+
+### .snapshot()
+
+Read-only context snapshot. Concurrent-safe for `asyncio.gather()`.
+
+```python
+result = await agent("Deep dive on aspect A").snapshot()
+```
+
+**What snapshot means:**
+
+- Reads from PhaseSession (if inside phase) or Session (if outside)
+- Does NOT write to PhaseSession or Session
+- Returns `None` as session to SDK, preventing writes
+- Concurrent-safe — multiple `.snapshot()` calls can run in parallel
+
+**WHERE axis spectrum:**
+
+```
+.isolated()    .snapshot()     (default)
+ ───────────────────────────────────────►
+ No context    Read-only       Read + Write
+```
+
+| | Session Read | Session Write | PhaseSession Read | PhaseSession Write |
+|---|:---:|:---:|:---:|:---:|
+| (default) | Yes | Yes | Yes | Yes |
+| `.snapshot()` | Yes | No | Yes | No |
+| `.isolated()` | No | No | No | No |
+
+**Use cases:**
+
+- Parallel execution with shared context (`asyncio.gather`)
+- Read-only analysis that shouldn't pollute conversation history
+- Fan-out pattern where multiple agents read the same context
+
+```python
+async with af.phase("Research"):
+    # First agent writes to PhaseSession normally
+    overview = await researcher(query).stream()
+
+    # Parallel deep-dives — each reads overview, doesn't write
+    deep_a, deep_b = await asyncio.gather(
+        specialist_a("Deep dive on aspect A").snapshot(),
+        specialist_b("Deep dive on aspect B").snapshot(),
+    )
+```
+
+!!! note "isolated() wins over snapshot()"
+    If both `.isolated()` and `.snapshot()` are set, `.isolated()` takes precedence. The result is fully isolated execution with no context.
+
+    ```python
+    # isolated() wins — no context at all
+    result = await agent("task").snapshot().isolated()  # = isolated()
+    ```
 
 ---
 
@@ -52,24 +105,28 @@ results = await asyncio.gather(
 
 ### .stream()
 
-Enables streaming mode. Events are forwarded to the handler as they arrive.
+Enables streaming execution mode. Uses the streaming API internally for faster first-token latency. The stream is consumed internally — delta events are **not** forwarded to the handler. Display is always full-text-at-once via `AgentResult`.
 
 ```python
 result = await assistant("Hello").stream()
 ```
 
-**What streaming enables:**
+**What `.stream()` controls:**
 
-- Real-time text display in CLI or web UI
-- Reasoning step visibility
-- Tool call notifications
-- Progress indication
+- Internal execution mode (streaming API vs batch API)
+- Faster first-token latency for long responses
 
-**Without streaming:**
+**What `.stream()` does NOT change:**
+
+- Display behavior — always full-text via `AgentResult`
+- Handler events — receives `AgentResult`, not deltas
+
+**With or without `.stream()`:**
 
 ```python
-result = await assistant("Hello")
-# Handler receives only the final AgentResult
+# Both paths emit AgentResult to handler with full text
+result = await assistant("Hello").stream()  # Streaming API internally
+result = await assistant("Hello")           # Batch API internally
 ```
 
 ### .silent()
@@ -191,6 +248,9 @@ result = await agent("prompt").context(ctx).stream()
 !!! note "Context is local, not sent to LLM"
     The context object is for local code only. It is not included in prompts.
 
+!!! warning "Not supported in ChatKit mode"
+    In ChatKit mode, `.context()` is silently overwritten by `AgentContext` (required for workflow boundaries). Use Agent hooks or pass data through the flow function for dependency injection in ChatKit.
+
 ### .run_kwarg()
 
 Set arbitrary SDK parameters:
@@ -218,6 +278,15 @@ await agent("prompt").silent().stream()
 await agent("prompt").stream().isolated()
 await agent("prompt").isolated().stream()
 
+# snapshot + stream (WHERE + HOW)
+result = await agent("task").snapshot().stream()
+
+# snapshot + silent (WHERE + HOW)
+result = await agent("task").snapshot().silent()
+
+# snapshot + max_turns (WHERE + LIMITS)
+result = await agent("task").snapshot().max_turns(3)
+
 # Across axes:
 await agent("prompt").stream().silent().isolated()
 
@@ -239,9 +308,10 @@ await agent("complex task") \
 
 | Modifier | Axis | UI Display | PhaseSession | Session | Execution |
 |:---------|:-----|:----------:|:------------:|:-------:|:---------:|
-| `.stream()` | HOW | Streaming | Yes | Yes | Normal |
+| `.stream()` | HOW | Full-text | Yes | Yes | Streaming API |
 | `.silent()` | HOW | No | Yes | Yes | Normal |
-| `.isolated()` | WHERE | No | No | No | Normal |
+| `.snapshot()` | WHERE | Yes | Read-only | Read-only | Normal |
+| `.isolated()` | WHERE | Yes | No | No | Normal |
 | `.max_turns(n)` | LIMITS | Yes | Yes | Yes | Limited |
 | `.run_config(cfg)` | SDK | Yes | Yes | Yes | Configured |
 | `.context(ctx)` | SDK | Yes | Yes | Yes | With DI |
@@ -255,7 +325,7 @@ Modifiers use `dataclasses.replace` to create new specs:
 
 ```python
 def stream(self) -> ExecutionSpec[T]:
-    return replace(self, streaming=True)
+    return replace(self, is_streaming=True)
 
 def silent(self) -> ExecutionSpec[T]:
     return replace(self, is_silent=True)
@@ -263,8 +333,11 @@ def silent(self) -> ExecutionSpec[T]:
 def isolated(self) -> ExecutionSpec[T]:
     return replace(self, is_isolated=True)
 
+def snapshot(self) -> ExecutionSpec[T]:
+    return replace(self, is_snapshot=True)
+
 def max_turns(self, max_turns: int) -> ExecutionSpec[T]:
-    return replace(self, max_turns_sdk=max_turns)
+    return replace(self, max_turns_limit=max_turns)
 
 def run_config(self, run_config: RunConfig) -> ExecutionSpec[T]:
     new_kwargs = {**self.run_kwargs, "run_config": run_config}
@@ -295,10 +368,12 @@ This ensures:
 # Wrong — TypeError
 await agent("prompt", stream=True)
 await agent("prompt", isolated=True)
+await agent("prompt", snapshot=True)
 
 # Correct
 await agent("prompt").stream()
 await agent("prompt").isolated()
+await agent("prompt").snapshot()
 ```
 
 **Don't call modifiers on Agent directly:**

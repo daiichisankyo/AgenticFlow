@@ -281,3 +281,94 @@ class TestPhasePersist:
             text = str(content)
         assert "SECOND" in text.upper()
         print(f"Phase persist multi-agent: last assistant written, {len(items)} items")
+
+
+class TestSnapshot:
+    """4.5 snapshot() - Read-only context snapshot."""
+
+    @pytest.mark.asyncio
+    async def test_snapshot_reads_phase_context(self):
+        """snapshot() inside phase reads PhaseSession history."""
+        agent = Agent(
+            name="snapshot_reader",
+            instructions="If you see a color in history, say it. Otherwise say 'UNKNOWN'.",
+            model="gpt-5.2",
+        )
+
+        async def flow(msg: str) -> str:
+            async with phase("Test", share_context=True) as p:
+                await p.add_items([{"role": "user", "content": "My favorite color is crimson"}])
+                await p.add_items([{"role": "assistant", "content": "Got it, crimson!"}])
+
+                result = await agent("What color did I mention?").snapshot().stream()
+                return result
+
+        chat = Runner(flow=flow)
+        result = await chat("test")
+
+        assert "crimson" in result.lower()
+        print(f"Snapshot reads phase context: {result}")
+
+    @pytest.mark.asyncio
+    async def test_snapshot_does_not_write_to_phase(self):
+        """snapshot() call does not modify PhaseSession items."""
+        agent = Agent(
+            name="snapshot_writer_test",
+            instructions="Reply with 'SNAPSHOT_REPLY'.",
+            model="gpt-5.2",
+        )
+
+        captured_ctx = None
+
+        async def flow(msg: str) -> str:
+            nonlocal captured_ctx
+            async with phase("Test", share_context=True) as p:
+                await p.add_items([{"role": "user", "content": "setup"}])
+                await p.add_items([{"role": "assistant", "content": "ready"}])
+
+                items_before = len(p.items)
+
+                # snapshot() should NOT write back to PhaseSession
+                await agent("test").snapshot().stream()
+
+                captured_ctx = p
+                items_after = len(p.items)
+
+                assert items_after == items_before, (
+                    f"snapshot() should not write to PhaseSession: "
+                    f"before={items_before}, after={items_after}"
+                )
+                return "done"
+
+        chat = Runner(flow=flow)
+        await chat("test")
+
+        assert captured_ctx is not None
+        print("Snapshot does not write to phase: verified")
+
+    @pytest.mark.asyncio
+    async def test_snapshot_reads_session_outside_phase(self):
+        """snapshot() outside phase reads Runner Session history."""
+        agent = Agent(
+            name="snapshot_session_reader",
+            instructions="If you see an animal in history, say it. Otherwise say 'UNKNOWN'.",
+            model="gpt-5.2",
+        )
+
+        # First: populate Session with a normal (non-snapshot) call
+        async def write_flow(msg: str) -> str:
+            return await agent(msg).stream()
+
+        session = SQLiteSession(session_id="snapshot_session_test", db_path=":memory:")
+        writer = Runner(flow=write_flow, session=session)
+        await writer("My favorite animal is penguin")
+
+        # Second: snapshot reads Session history without writing
+        async def read_flow(msg: str) -> str:
+            return await agent(msg).snapshot().stream()
+
+        reader = Runner(flow=read_flow, session=session)
+        result = await reader("What animal did I mention?")
+
+        assert "penguin" in result.lower()
+        print(f"Snapshot reads session outside phase: {result}")

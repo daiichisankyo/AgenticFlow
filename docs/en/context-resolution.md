@@ -23,14 +23,16 @@ When an agent executes, context is resolved in this priority order:
 
 ```
 1. isolated=True        -> No context (raw input, no session)
-2. phase(share_context=True)  -> PhaseSession (inherited + accumulated)
-3. phase(share_context=False) -> Cached Session history (read-only)
-4. Default (outside phase)    -> Global Session from Runner
+2. snapshot=True         -> Read-only context (PhaseSession > Session > empty)
+3. phase(share_context=True)  -> PhaseSession (inherited + accumulated)
+4. phase(share_context=False) -> Cached Session history (read-only)
+5. Default (outside phase)    -> Global Session from Runner
 ```
 
 This hierarchy ensures:
 
 - **Isolation**: `.isolated()` always runs without context
+- **Snapshot safety**: `.snapshot()` reads context without writing (concurrent-safe)
 - **Phase encapsulation**: Phase internal thinking stays in PhaseSession
 - **Session integrity**: Global Session is only written when explicitly intended
 
@@ -39,7 +41,9 @@ This hierarchy ensures:
 ```mermaid
 graph TD
     A(".isolated()?") -->|"Yes"| B("No context — stateless")
-    A -->|"No"| C("In phase?")
+    A -->|"No"| A2(".snapshot()?")
+    A2 -->|"Yes"| B2("Read-only context — no writes")
+    A2 -->|"No"| C("In phase?")
     C -->|"Yes"| D("Use PhaseSession")
     C -->|"No"| E("Use Session")
 ```
@@ -187,7 +191,38 @@ async for event in run_with_chatkit_context(runner, thread, store, context, user
 
 ## Context Resolution in ExecutionSpec
 
-`ExecutionSpec.resolve_input()` implements the resolution priority:
+`ExecutionSpec.execute()` checks for snapshot mode first, then delegates to `resolve_input()`:
+
+```python
+async def execute(self) -> T:
+    # Snapshot is handled in execute() because it needs async get_items()
+    if self.is_snapshot and not self.is_isolated:
+        input_data, session = await self.resolve_with_snapshot()
+    else:
+        input_data, session = self.resolve_input()
+    # ... run agent with input_data and session
+```
+
+`resolve_with_snapshot()` captures a read-only context snapshot:
+
+```python
+async def resolve_with_snapshot(self) -> tuple[Any, None]:
+    # Priority: PhaseSession > Session > empty (like isolated)
+    ps = current_phase_session.get()
+    if ps is not None:
+        history = await ps.get_items()
+    else:
+        session = current_session.get()
+        if session is not None:
+            history = await session.get_items()
+        else:
+            return self.input, None
+
+    user_msg = {"role": "user", "content": [{"type": "input_text", "text": self.input}]}
+    return list(history) + [user_msg], None  # None session prevents SDK writes
+```
+
+`resolve_input()` handles the remaining (non-snapshot) cases:
 
 ```python
 def resolve_input(self) -> tuple[Any, Any]:
@@ -243,4 +278,4 @@ def resolve_input(self) -> tuple[Any, Any]:
 
 - [Phase](concepts/phase.md) - Phase context management
 - [Flow & Runner](concepts/flow-runner.md) - Runner context injection
-- [Modifiers](concepts/modifiers.md) - `.isolated()` and context control
+- [Modifiers](concepts/modifiers.md) - `.isolated()`, `.snapshot()` and context control

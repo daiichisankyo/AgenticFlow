@@ -145,6 +145,58 @@ class TestResolveInputPriority:
             current_in_phase.reset(in_phase_token)
             current_session.reset(session_token)
 
+    @pytest.mark.asyncio
+    async def test_snapshot_reads_phase_context(self):
+        """snapshot() reads PhaseSession history, returns (list, None)."""
+        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        ctx = PhaseSession(
+            "test",
+            inherited_history=[
+                {"role": "user", "content": [{"type": "input_text", "text": "history"}]}
+            ],
+        )
+
+        token = current_phase_session.set(ctx)
+        try:
+            spec = agent("prompt").snapshot()
+            input_data, session = await spec.resolve_with_snapshot()
+
+            # Should return history list with appended user message
+            assert isinstance(input_data, list)
+            assert len(input_data) >= 2  # history + new user message
+            assert input_data[-1]["role"] == "user"
+            assert input_data[-1]["content"][0]["text"] == "prompt"
+
+            # Session is None (read-only, no write)
+            assert session is None
+        finally:
+            current_phase_session.reset(token)
+
+    @pytest.mark.asyncio
+    async def test_snapshot_isolated_wins(self):
+        """is_isolated=True + is_snapshot=True -> isolated behavior (no history).
+
+        In execute(): `if self.is_snapshot and not self.is_isolated` — isolated wins.
+        """
+        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        ctx = PhaseSession(
+            "test",
+            inherited_history=[
+                {"role": "user", "content": [{"type": "input_text", "text": "history"}]}
+            ],
+        )
+
+        token = current_phase_session.set(ctx)
+        try:
+            spec = agent("prompt").snapshot().isolated()
+            # execute() falls through to resolve_input() when is_isolated=True
+            input_data, session = spec.resolve_input()
+
+            assert input_data == "prompt"  # Raw input, no history
+            assert session is None
+        finally:
+            current_phase_session.reset(token)
+
 
 class TestPhaseSessionWriteBehavior:
     """Test that phase controls Session write behavior correctly.
@@ -260,7 +312,9 @@ class TestSilentEventSuppression:
 
     @pytest.mark.asyncio
     async def test_silent_suppresses_streaming_events(self):
-        """silent().stream() should not forward streaming events to handler."""
+        """silent().stream() should not emit AgentResult to handler."""
+        from agentic_flow.types import AgentResult
+
         events = []
 
         def handler(event):
@@ -278,10 +332,9 @@ class TestSilentEventSuppression:
         # Result should still be returned
         assert result is not None
 
-        # No streaming events should be captured
-        # (PhaseStarted/PhaseEnded may still be emitted, but not agent events)
-        streaming_events = [e for e in events if hasattr(e, "data") and hasattr(e.data, "delta")]
-        assert len(streaming_events) == 0, "silent() should suppress streaming events"
+        # No AgentResult events should be captured (silent suppresses display)
+        agent_results = [e for e in events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 0, "silent() should suppress AgentResult in streaming"
 
     @pytest.mark.asyncio
     async def test_silent_still_updates_phase_session(self):
@@ -305,7 +358,9 @@ class TestSilentEventSuppression:
 
     @pytest.mark.asyncio
     async def test_non_silent_does_call_handler(self):
-        """Non-silent calls should call handler (control test)."""
+        """Non-silent calls should emit AgentResult to handler (control test)."""
+        from agentic_flow.types import AgentResult
+
         events = []
 
         def handler(event):
@@ -320,8 +375,10 @@ class TestSilentEventSuppression:
         chat = Runner(flow=flow, handler=handler)
         await chat("test")
 
-        # Handler should have received events
-        assert len(events) > 0, "Non-silent should call handler"
+        # Handler should have received AgentResult
+        agent_results = [e for e in events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Non-silent should emit AgentResult to handler"
+        assert agent_results[0].content is not None
 
 
 class TestShareContextFalseReadOnly:
@@ -492,13 +549,11 @@ class TestEventTypeSystem:
         # Get the types in the Union
         args = get_args(Event)
 
-        # StreamEvent is itself a Union, so its members are expanded
-        # Just verify our custom types are included
+        # Verify our custom types are included
         assert PhaseStarted in args
         assert PhaseEnded in args
         assert AgentResult in args
-        # And that there are more types (SDK StreamEvent members)
-        assert len(args) > 3
+        assert len(args) == 3
 
     def test_handler_type_accepts_all_events(self):
         """Handler should be typed to accept all Event types."""
@@ -660,3 +715,304 @@ class TestPhaseEventsToHandler:
         assert phase_started[1].label == "Inner"
 
 
+class TestAgentResultFullTextOnce:
+    """Test that handler receives exactly 1 AgentResult with full text.
+
+    From new output semantics:
+    - Display is always full-text-at-once
+    - Handler receives AgentResult once, not delta events
+    - .stream() controls internal execution mode, not display
+    """
+
+    @pytest.mark.asyncio
+    async def test_handler_receives_one_agent_result_streaming(self):
+        """Handler receives exactly 1 AgentResult after .stream()."""
+        from agentic_flow.types import AgentResult
+
+        events = []
+
+        def handler(event):
+            events.append(event)
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).stream()
+
+        chat = Runner(flow=flow, handler=handler)
+        result = await chat("test")
+
+        agent_results = [e for e in events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Exactly 1 AgentResult expected"
+        assert agent_results[0].content is not None
+        # Content should match the return value
+        assert agent_results[0].content == result
+
+    @pytest.mark.asyncio
+    async def test_handler_receives_one_agent_result_non_streaming(self):
+        """Handler receives exactly 1 AgentResult without .stream()."""
+        from agentic_flow.types import AgentResult
+
+        events = []
+
+        def handler(event):
+            events.append(event)
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg)
+
+        chat = Runner(flow=flow, handler=handler)
+        result = await chat("test")
+
+        agent_results = [e for e in events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Exactly 1 AgentResult expected"
+        assert agent_results[0].content == result
+
+    @pytest.mark.asyncio
+    async def test_no_streaming_deltas_in_handler(self):
+        """Handler should NOT receive streaming delta events."""
+        events = []
+
+        def handler(event):
+            events.append(event)
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).stream()
+
+        chat = Runner(flow=flow, handler=handler)
+        await chat("test")
+
+        # No delta events should reach handler
+        delta_events = [e for e in events if hasattr(e, "data") and hasattr(e.data, "delta")]
+        assert len(delta_events) == 0, "No streaming deltas should reach handler"
+
+
+class TestStreamDoesNotAffectHandlerOutput:
+    """.stream() controls internal execution mode, not display.
+
+    Handler receives the same AgentResult whether .stream() is used or not.
+    """
+
+    @pytest.mark.asyncio
+    async def test_same_agent_result_with_and_without_stream(self):
+        """Handler receives AgentResult in both streaming and non-streaming modes."""
+        from agentic_flow.types import AgentResult
+
+        stream_events = []
+        non_stream_events = []
+
+        def stream_handler(event):
+            stream_events.append(event)
+
+        def non_stream_handler(event):
+            non_stream_events.append(event)
+
+        agent = Agent(name="test", instructions="Reply with 'OK'", model="gpt-5.2")
+
+        async def flow_stream(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).stream()
+
+        async def flow_non_stream(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg)
+
+        chat_stream = Runner(flow=flow_stream, handler=stream_handler)
+        await chat_stream("test")
+
+        chat_non_stream = Runner(flow=flow_non_stream, handler=non_stream_handler)
+        await chat_non_stream("test")
+
+        stream_results = [e for e in stream_events if isinstance(e, AgentResult)]
+        non_stream_results = [e for e in non_stream_events if isinstance(e, AgentResult)]
+
+        assert len(stream_results) == 1, "Stream mode: 1 AgentResult"
+        assert len(non_stream_results) == 1, "Non-stream mode: 1 AgentResult"
+
+        # Both should have content (the actual text may differ between calls)
+        assert stream_results[0].content is not None
+        assert non_stream_results[0].content is not None
+
+
+class TestPrintFallback:
+    """Test print() fallback when no handler and no ChatKit.
+
+    From new output semantics:
+    - Fallback priority: ChatKit > Handler > print
+    - When no handler/ChatKit, print() is used for full text display
+    - .silent() suppresses all display including print
+    """
+
+    @pytest.mark.asyncio
+    async def test_print_called_when_no_handler_non_streaming(self):
+        """print() is called with full text when no handler (non-streaming)."""
+        from unittest.mock import patch
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg)
+
+        chat = Runner(flow=flow)  # No handler
+
+        with patch("builtins.print") as mock_print:
+            result = await chat("test")
+
+        assert result is not None
+        assert mock_print.called, "print() should be called when no handler"
+
+    @pytest.mark.asyncio
+    async def test_print_called_when_no_handler_streaming(self):
+        """print() is called with full text when no handler (streaming)."""
+        from unittest.mock import patch
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).stream()
+
+        chat = Runner(flow=flow)  # No handler
+
+        with patch("builtins.print") as mock_print:
+            result = await chat("test")
+
+        assert result is not None
+        assert mock_print.called, "print() should be called when no handler in streaming"
+
+    @pytest.mark.asyncio
+    async def test_print_not_called_when_silent(self):
+        """print() should NOT be called when .silent() is used."""
+        from unittest.mock import patch
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).silent()
+
+        chat = Runner(flow=flow)  # No handler
+
+        with patch("builtins.print") as mock_print:
+            result = await chat("test")
+
+        assert result is not None
+        assert not mock_print.called, "print() should NOT be called when silent"
+
+    @pytest.mark.asyncio
+    async def test_print_not_called_when_silent_streaming(self):
+        """print() should NOT be called when .silent().stream() is used."""
+        from unittest.mock import patch
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).silent().stream()
+
+        chat = Runner(flow=flow)  # No handler
+
+        with patch("builtins.print") as mock_print:
+            result = await chat("test")
+
+        assert result is not None
+        assert not mock_print.called, "print() should NOT be called when silent+stream"
+
+    @pytest.mark.asyncio
+    async def test_print_not_called_when_handler_present(self):
+        """print() should NOT be called when handler is present."""
+        from unittest.mock import patch
+
+        events = []
+
+        def handler(event):
+            events.append(event)
+
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg).stream()
+
+        chat = Runner(flow=flow, handler=handler)
+
+        with patch("builtins.print") as mock_print:
+            await chat("test")
+
+        assert not mock_print.called, "print() should NOT be called when handler present"
+
+
+class TestFallbackPriority:
+    """Test fallback priority: ChatKit > Handler > print.
+
+    From new output semantics:
+    - When ChatKit context is active: ChatKit receives result, not handler, not print
+    - When only handler: handler receives result, not print
+    - When neither: print is called
+    """
+
+    @pytest.mark.asyncio
+    async def test_handler_receives_when_no_chatkit(self):
+        """Handler receives AgentResult when no ChatKit context."""
+        from agentic_flow.types import AgentResult
+
+        events = []
+
+        def handler(event):
+            events.append(event)
+
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+
+        async def flow(msg: str) -> str:
+            async with phase("Test"):
+                return await agent(msg)
+
+        chat = Runner(flow=flow, handler=handler)
+        await chat("test")
+
+        agent_results = [e for e in events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 1, "Handler should receive AgentResult"
+
+    @pytest.mark.asyncio
+    async def test_chatkit_takes_priority_over_handler(self):
+        """When ChatKit context is active, handler should NOT receive AgentResult."""
+        from agentic_flow.chatkit import ChatKitExecutionContext, current_chatkit_context
+        from agentic_flow.types import AgentResult
+
+        events = []
+
+        def handler(event):
+            events.append(event)
+
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+
+        mock_agent_context = MagicMock()
+        mock_store = MagicMock()
+        chatkit_ctx = ChatKitExecutionContext(mock_agent_context, mock_store)
+        chatkit_ctx.emit_agent_result = AsyncMock()
+
+        async def flow(msg: str) -> str:
+            token = current_chatkit_context.set(chatkit_ctx)
+            try:
+                # Non-streaming: ChatKit should get the result, not handler
+                return await agent(msg)
+            finally:
+                current_chatkit_context.reset(token)
+
+        chat = Runner(flow=flow, handler=handler)
+        await chat("test")
+
+        # ChatKit should have received the result
+        chatkit_ctx.emit_agent_result.assert_called_once()
+
+        # Handler should NOT have received AgentResult (ChatKit has priority)
+        agent_results = [e for e in events if isinstance(e, AgentResult)]
+        assert len(agent_results) == 0, "Handler should NOT receive AgentResult when ChatKit active"

@@ -5,10 +5,12 @@ Design:
     await executes -> T
 
     Modifiers (5-axis model):
-    - WHERE: .isolated() - No Session/PhaseSession
+    - WHERE: .isolated(), .snapshot() - Context control
     - HOW: .stream(), .silent() - Streaming, UI suppression
     - LIMITS: .max_turns(n) - Execution constraints
     - SDK: .run_config(), .context(), .run_kwarg() - Pass-through
+
+    WHERE axis: isolated (no context) < snapshot (read-only) < default (read+write)
 
     T is determined by Agent's output_type:
     - output_type=None -> T = str
@@ -40,6 +42,14 @@ current_phase_session: ContextVar[PhaseSession | None] = ContextVar(
 )
 
 
+def make_user_message(text: str) -> dict:
+    """Create a user message dict for SDK input."""
+    return {
+        "role": "user",
+        "content": [{"type": "input_text", "text": text}],
+    }
+
+
 @dataclass(eq=False)
 class ExecutionSpec(Generic[T]):
     """Awaitable execution specification.
@@ -48,10 +58,12 @@ class ExecutionSpec(Generic[T]):
     Returns T where T is determined by Agent's output_type.
 
     Modifiers (5-axis model):
-        WHERE: .isolated() - No Session/PhaseSession
+        WHERE: .isolated(), .snapshot() - Context control
         HOW: .stream(), .silent() - Streaming, UI suppression
         LIMITS: .max_turns(n) - Execution constraints
         SDK: .run_config(), .context(), .run_kwarg()
+
+    WHERE axis: isolated (no context) < snapshot (read-only) < default (read+write)
 
     Example:
         # Basic
@@ -62,14 +74,16 @@ class ExecutionSpec(Generic[T]):
         result = await agent("prompt").max_turns(5).stream()
         result = await agent("prompt").run_config(RunConfig(...))
         result = await agent("prompt").context(my_context).stream()
+        result = await agent("prompt").snapshot()  # Read-only context
     """
 
     sdk_agent: SDKAgent
     input: str = ""
-    streaming: bool = False
+    is_streaming: bool = False
     is_isolated: bool = False
+    is_snapshot: bool = False
     is_silent: bool = False
-    max_turns_sdk: int | None = None
+    max_turns_limit: int | None = None
     run_kwargs: dict[str, Any] = field(default_factory=dict)
 
     def __hash__(self) -> int:
@@ -78,11 +92,11 @@ class ExecutionSpec(Generic[T]):
 
     def stream(self) -> ExecutionSpec[T]:
         """Enable streaming mode. Execution occurs when this spec is awaited."""
-        return replace(self, streaming=True)
+        return replace(self, is_streaming=True)
 
     def max_turns(self, max_turns: int) -> ExecutionSpec[T]:
         """Set max_turns for this execution."""
-        return replace(self, max_turns_sdk=max_turns)
+        return replace(self, max_turns_limit=max_turns)
 
     def silent(self) -> ExecutionSpec[T]:
         """Enable silent mode. Suppresses UI display only.
@@ -114,6 +128,10 @@ class ExecutionSpec(Generic[T]):
     def isolated(self) -> ExecutionSpec[T]:
         """Enable isolated mode. No Session read/write, no PhaseSession."""
         return replace(self, is_isolated=True)
+
+    def snapshot(self) -> ExecutionSpec[T]:
+        """Read-only context snapshot. Concurrent-safe for asyncio.gather()."""
+        return replace(self, is_snapshot=True)
 
     def run_config(self, run_config: Any) -> ExecutionSpec[T]:
         """Set RunConfig for this execution.
@@ -169,49 +187,29 @@ class ExecutionSpec(Generic[T]):
 
     async def execute(self) -> T:
         """Execute the agent call. Returns T (str or Pydantic model)."""
-        from .chatkit import current_chatkit_context
+        if self.is_snapshot and not self.is_isolated:
+            input_data, session = await self.resolve_with_snapshot()
+        else:
+            input_data, session = self.resolve_input()
 
-        input_data, session = self.resolve_input()
-
-        if self.streaming:
+        if self.is_streaming:
             output = await self.execute_streaming(input_data, session)
         else:
-            run_kwargs: dict = {"session": session, **self.run_kwargs}
-            if self.max_turns_sdk is not None:
-                run_kwargs["max_turns"] = self.max_turns_sdk
-            result = await Runner.run(self.sdk_agent, input_data, **run_kwargs)
+            result = await Runner.run(self.sdk_agent, input_data, **self.build_run_kwargs(session))
             output = result.final_output
-
-            # Non-streaming UI: handler (CLI) and ChatKit are mutually exclusive in practice.
-            # ChatKit mode uses run_with_chatkit_context() which ignores Runner.handler.
-            if not self.is_silent:
-                from .types import AgentResult
-
-                handler = self.resolve_handler()
-                event = AgentResult(content=output)
-
-                if handler:
-                    result = handler(event)
-                    if hasattr(result, "__await__"):
-                        await result
-
-                chatkit_ctx = current_chatkit_context.get()
-                if chatkit_ctx is not None:
-                    await chatkit_ctx.emit_agent_result(output)
-
-        # SDK handles session.add_items() automatically
-        # No manual chat.append() needed
+            await self.emit_output(output)
 
         return output
 
     async def execute_streaming(self, input_data: Any, session: Any) -> T:
         """Execute with streaming.
 
-        When ChatKit context is active, uses ChatKitExecutionContext.execute_spec()
-        to properly stream with workflow boundary management.
-        Returns T (str or Pydantic model).
+        .stream() controls internal execution mode (streaming API for faster
+        first-token), NOT display. Display is always full-text-at-once.
 
-        When is_silent=True, events are not forwarded to handler.
+        When ChatKit context is active, uses ChatKitExecutionContext.execute_spec()
+        for workflow boundary management.
+        Returns T (str or Pydantic model).
         """
         from .chatkit import current_chatkit_context
 
@@ -219,19 +217,32 @@ class ExecutionSpec(Generic[T]):
         if chatkit_ctx is not None:
             return await chatkit_ctx.execute_spec(self)
 
-        handler = self.resolve_handler() if not self.is_silent else None
-        run_kwargs: dict = {"session": session, **self.run_kwargs}
-        if self.max_turns_sdk is not None:
-            run_kwargs["max_turns"] = self.max_turns_sdk
-        stream = Runner.run_streamed(self.sdk_agent, input_data, **run_kwargs)
+        stream = Runner.run_streamed(self.sdk_agent, input_data, **self.build_run_kwargs(session))
 
-        async for event in stream.stream_events():
-            if handler:
-                result = handler(event)
-                if hasattr(result, "__await__"):
-                    await result
+        async for _event in stream.stream_events():
+            pass
 
-        return stream.final_output
+        output = stream.final_output
+        await self.emit_output(output)
+        return output
+
+    async def resolve_with_snapshot(self) -> tuple[Any, None]:
+        """Capture read-only context snapshot at execution time.
+
+        Priority: PhaseSession > Session > empty (like isolated).
+        Returns (history_list, None) — None session prevents SDK writes.
+        """
+        ps = current_phase_session.get()
+        if ps is not None:
+            history = await ps.get_items()
+        else:
+            session = current_session.get()
+            if session is not None:
+                history = await session.get_items()
+            else:
+                return self.input, None
+
+        return list(history) + [make_user_message(self.input)], None
 
     def resolve_input(self) -> tuple[Any, Any]:
         """Resolve input and session.
@@ -261,12 +272,8 @@ class ExecutionSpec(Generic[T]):
             # Return as list (no session) to prevent SDK from writing
             cached_history = current_phase_session_history.get()
             if cached_history is not None:
-                user_message = {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": self.input}],
-                }
                 messages = list(cached_history)
-                messages.append(user_message)
+                messages.append(make_user_message(self.input))
                 return messages, None
             return self.input, None
 
@@ -277,6 +284,34 @@ class ExecutionSpec(Generic[T]):
     def resolve_handler(self) -> Handler | None:
         """Resolve handler from current context."""
         return current_handler.get()
+
+    def build_run_kwargs(self, session: Any) -> dict:
+        """Build kwargs dict for SDK Runner.run() / run_streamed()."""
+        run_kwargs: dict = {"session": session, **self.run_kwargs}
+        if self.max_turns_limit is not None:
+            run_kwargs["max_turns"] = self.max_turns_limit
+        return run_kwargs
+
+    async def emit_output(self, output: Any) -> None:
+        """Display fallback: ChatKit > Handler > print. No-op if silent."""
+        if self.is_silent:
+            return
+
+        from .chatkit import current_chatkit_context
+
+        chatkit_ctx = current_chatkit_context.get()
+        if chatkit_ctx is not None:
+            await chatkit_ctx.emit_agent_result(output)
+            return
+
+        from .types import AgentResult
+        from .utils import call_handler, serialize_output
+
+        handler = self.resolve_handler()
+        if handler:
+            await call_handler(handler, AgentResult(content=output))
+        else:
+            print(serialize_output(output))
 
 
 class Agent(Generic[T]):
@@ -290,7 +325,7 @@ class Agent(Generic[T]):
     AF adds only:
         - Callable form: agent(prompt) -> ExecutionSpec[T]
         - Modifiers on ExecutionSpec (not on Agent):
-          - WHERE: .isolated()
+          - WHERE: .isolated(), .snapshot()
           - HOW: .stream(), .silent()
           - LIMITS: .max_turns(n)
           - SDK: .run_config(), .context(), .run_kwarg()

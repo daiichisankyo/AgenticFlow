@@ -2,7 +2,7 @@
 
 Comprehensive tests for all ExecutionSpec modifiers organized by axis:
 - ExecutionSpec[T] type parameter
-- WHERE axis: .isolated()
+- WHERE axis: .isolated(), .snapshot()
 - HOW axis: .stream(), .silent()
 - LIMITS axis: .max_turns(n)
 - SDK pass-through: .run_config(), .context(), .run_kwarg()
@@ -13,18 +13,13 @@ No mocks required - pure unit tests.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 
-from pydantic import BaseModel
+import pytest
 
 from agentic_flow import Agent, ExecutionSpec
-
-
-class Analysis(BaseModel):
-    """Test Pydantic model for typed output."""
-
-    sentiment: str
-    score: float
+from tests.conftest import Analysis
 
 
 class TestExecutionSpecTypeParameter:
@@ -68,9 +63,7 @@ class TestExecutionSpecTypeParameter:
         spec4: ExecutionSpec[Analysis] = spec3.isolated()
         spec5: ExecutionSpec[Analysis] = spec4.max_turns(5)
 
-        assert all(
-            isinstance(s, ExecutionSpec) for s in [spec1, spec2, spec3, spec4, spec5]
-        )
+        assert all(isinstance(s, ExecutionSpec) for s in [spec1, spec2, spec3, spec4, spec5])
 
 
 # =============================================================================
@@ -99,8 +92,33 @@ class TestIsolated:
 
         assert isolated_spec.input == spec.input
         assert isolated_spec.sdk_agent is spec.sdk_agent
-        assert isolated_spec.streaming is True
+        assert isolated_spec.is_streaming is True
         assert isolated_spec.is_silent is True
+
+
+class TestSnapshot:
+    """Tests for .snapshot() modifier - WHERE axis."""
+
+    def test_snapshot_returns_new_spec(self):
+        """snapshot() returns a new ExecutionSpec with is_snapshot=True."""
+        agent = Agent(name="test", instructions="test")
+        spec = agent("prompt")
+        snapshot_spec = spec.snapshot()
+
+        assert spec is not snapshot_spec
+        assert spec.is_snapshot is False
+        assert snapshot_spec.is_snapshot is True
+
+    def test_snapshot_preserves_other_fields(self):
+        """snapshot() preserves all other fields."""
+        agent = Agent(name="test", instructions="test")
+        spec = agent("prompt").stream().silent()
+        snapshot_spec = spec.snapshot()
+
+        assert snapshot_spec.input == spec.input
+        assert snapshot_spec.sdk_agent is spec.sdk_agent
+        assert snapshot_spec.is_streaming is True
+        assert snapshot_spec.is_silent is True
 
 
 # =============================================================================
@@ -118,8 +136,8 @@ class TestStream:
         stream_spec = spec.stream()
 
         assert spec is not stream_spec
-        assert spec.streaming is False
-        assert stream_spec.streaming is True
+        assert spec.is_streaming is False
+        assert stream_spec.is_streaming is True
 
     def test_stream_preserves_other_fields(self):
         """stream() preserves all other fields."""
@@ -154,7 +172,7 @@ class TestSilent:
 
         assert silent_spec.input == spec.input
         assert silent_spec.sdk_agent is spec.sdk_agent
-        assert silent_spec.streaming is True
+        assert silent_spec.is_streaming is True
         assert silent_spec.is_isolated is True
 
 
@@ -173,8 +191,8 @@ class TestMaxTurns:
         limited_spec = spec.max_turns(5)
 
         assert spec is not limited_spec
-        assert spec.max_turns_sdk is None
-        assert limited_spec.max_turns_sdk == 5
+        assert spec.max_turns_limit is None
+        assert limited_spec.max_turns_limit == 5
 
     def test_max_turns_preserves_other_fields(self):
         """max_turns() preserves all other fields."""
@@ -184,7 +202,7 @@ class TestMaxTurns:
 
         assert limited_spec.input == spec.input
         assert limited_spec.sdk_agent is spec.sdk_agent
-        assert limited_spec.streaming is True
+        assert limited_spec.is_streaming is True
         assert limited_spec.is_silent is True
 
     def test_max_turns_chain_with_stream(self):
@@ -192,15 +210,15 @@ class TestMaxTurns:
         agent = Agent(name="test", instructions="test")
         spec = agent("prompt").max_turns(5).stream()
 
-        assert spec.max_turns_sdk == 5
-        assert spec.streaming is True
+        assert spec.max_turns_limit == 5
+        assert spec.is_streaming is True
 
     def test_max_turns_chain_with_isolated(self):
         """max_turns().isolated() works."""
         agent = Agent(name="test", instructions="test")
         spec = agent("prompt").max_turns(3).isolated()
 
-        assert spec.max_turns_sdk == 3
+        assert spec.max_turns_limit == 3
         assert spec.is_isolated is True
 
     def test_max_turns_override(self):
@@ -208,7 +226,7 @@ class TestMaxTurns:
         agent = Agent(name="test", instructions="test")
         spec = agent("prompt").max_turns(5).max_turns(10)
 
-        assert spec.max_turns_sdk == 10
+        assert spec.max_turns_limit == 10
 
 
 # =============================================================================
@@ -247,8 +265,8 @@ class TestRunConfig:
         configured_spec = spec.run_config(MockRunConfig())
 
         assert configured_spec.input == spec.input
-        assert configured_spec.streaming is True
-        assert configured_spec.max_turns_sdk == 5
+        assert configured_spec.is_streaming is True
+        assert configured_spec.max_turns_limit == 5
 
     def test_run_config_chain_with_stream(self):
         """run_config().stream() works."""
@@ -261,7 +279,7 @@ class TestRunConfig:
         spec = agent("prompt").run_config(MockRunConfig()).stream()
 
         assert "run_config" in spec.run_kwargs
-        assert spec.streaming is True
+        assert spec.is_streaming is True
 
 
 class TestContext:
@@ -310,8 +328,8 @@ class TestContext:
         spec = agent("prompt").context(AppContext("u1")).max_turns(5).stream()
 
         assert "context" in spec.run_kwargs
-        assert spec.max_turns_sdk == 5
-        assert spec.streaming is True
+        assert spec.max_turns_limit == 5
+        assert spec.is_streaming is True
 
 
 class TestRunKwarg:
@@ -341,11 +359,7 @@ class TestRunKwarg:
     def test_run_kwarg_chain(self):
         """Multiple run_kwarg() calls accumulate."""
         agent = Agent(name="test", instructions="test")
-        spec = (
-            agent("prompt")
-            .run_kwarg(param1="value1")
-            .run_kwarg(param2="value2")
-        )
+        spec = agent("prompt").run_kwarg(param1="value1").run_kwarg(param2="value2")
 
         assert spec.run_kwargs.get("param1") == "value1"
         assert spec.run_kwargs.get("param2") == "value2"
@@ -353,11 +367,7 @@ class TestRunKwarg:
     def test_run_kwarg_override(self):
         """Later run_kwarg() overrides earlier values."""
         agent = Agent(name="test", instructions="test")
-        spec = (
-            agent("prompt")
-            .run_kwarg(key="first")
-            .run_kwarg(key="second")
-        )
+        spec = agent("prompt").run_kwarg(key="first").run_kwarg(key="second")
 
         assert spec.run_kwargs.get("key") == "second"
 
@@ -386,12 +396,14 @@ class TestModifierCombinations:
             .stream()
             .silent()
             .isolated()
+            .snapshot()
         )
 
-        assert spec.max_turns_sdk == 10
-        assert spec.streaming is True
+        assert spec.max_turns_limit == 10
+        assert spec.is_streaming is True
         assert spec.is_silent is True
         assert spec.is_isolated is True
+        assert spec.is_snapshot is True
         assert "context" in spec.run_kwargs
         assert "run_config" in spec.run_kwargs
         assert spec.run_kwargs.get("custom_param") == "value"
@@ -406,8 +418,8 @@ class TestModifierCombinations:
         # Order 2 (reversed)
         spec2 = agent("p").isolated().max_turns(5).stream()
 
-        assert spec1.streaming == spec2.streaming
-        assert spec1.max_turns_sdk == spec2.max_turns_sdk
+        assert spec1.is_streaming == spec2.is_streaming
+        assert spec1.max_turns_limit == spec2.max_turns_limit
         assert spec1.is_isolated == spec2.is_isolated
 
     def test_run_kwargs_accumulation(self):
@@ -469,49 +481,43 @@ class TestForbiddenForms:
     def test_agent_has_no_max_turns(self):
         """Agent does not have max_turns() method."""
         agent = Agent(name="test", instructions="test")
-        assert not hasattr(agent, "max_turns") or not callable(
-            getattr(agent, "max_turns", None)
-        )
+        assert not hasattr(agent, "max_turns") or not callable(getattr(agent, "max_turns", None))
 
     def test_agent_has_no_run_config(self):
         """Agent does not have run_config() method."""
         agent = Agent(name="test", instructions="test")
-        assert not hasattr(agent, "run_config") or not callable(
-            getattr(agent, "run_config", None)
-        )
+        assert not hasattr(agent, "run_config") or not callable(getattr(agent, "run_config", None))
 
     def test_agent_has_no_context(self):
         """Agent does not have context() method."""
         agent = Agent(name="test", instructions="test")
-        assert not hasattr(agent, "context") or not callable(
-            getattr(agent, "context", None)
-        )
+        assert not hasattr(agent, "context") or not callable(getattr(agent, "context", None))
 
     def test_agent_has_no_run_kwarg(self):
         """Agent does not have run_kwarg() method."""
         agent = Agent(name="test", instructions="test")
-        assert not hasattr(agent, "run_kwarg") or not callable(
-            getattr(agent, "run_kwarg", None)
-        )
+        assert not hasattr(agent, "run_kwarg") or not callable(getattr(agent, "run_kwarg", None))
+
+    def test_agent_has_no_snapshot_method(self):
+        """Agent does not have a snapshot() method."""
+        agent = Agent(name="test", instructions="test")
+        assert not hasattr(agent, "snapshot") or not callable(getattr(agent, "snapshot", None))
 
     # Agent.__call__ should NOT accept modifier params
     def test_agent_call_has_no_stream_param(self):
         """Agent.__call__ does not accept stream parameter."""
-        import inspect
         agent = Agent(name="test", instructions="test")
         params = list(inspect.signature(agent.__call__).parameters.keys())
         assert "stream" not in params
 
     def test_agent_call_has_no_silent_param(self):
         """Agent.__call__ does not accept silent parameter."""
-        import inspect
         agent = Agent(name="test", instructions="test")
         params = list(inspect.signature(agent.__call__).parameters.keys())
         assert "silent" not in params
 
     def test_agent_call_has_no_isolated_param(self):
         """Agent.__call__ does not accept isolated parameter."""
-        import inspect
         agent = Agent(name="test", instructions="test")
         params = list(inspect.signature(agent.__call__).parameters.keys())
         assert "isolated" not in params
@@ -519,43 +525,41 @@ class TestForbiddenForms:
     # ExecutionSpec modifiers should only accept self
     def test_execution_spec_stream_signature(self):
         """ExecutionSpec.stream() only accepts self."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.stream).parameters.keys())
         assert params == ["self"]
 
     def test_execution_spec_silent_signature(self):
         """ExecutionSpec.silent() only accepts self."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.silent).parameters.keys())
         assert params == ["self"]
 
     def test_execution_spec_isolated_signature(self):
         """ExecutionSpec.isolated() only accepts self."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.isolated).parameters.keys())
+        assert params == ["self"]
+
+    def test_execution_spec_snapshot_signature(self):
+        """ExecutionSpec.snapshot() only accepts self."""
+        params = list(inspect.signature(ExecutionSpec.snapshot).parameters.keys())
         assert params == ["self"]
 
     def test_execution_spec_max_turns_signature(self):
         """ExecutionSpec.max_turns() has correct signature."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.max_turns).parameters.keys())
         assert params == ["self", "max_turns"]
 
     def test_execution_spec_run_config_signature(self):
         """ExecutionSpec.run_config() has correct signature."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.run_config).parameters.keys())
         assert params == ["self", "run_config"]
 
     def test_execution_spec_context_signature(self):
         """ExecutionSpec.context() has correct signature."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.context).parameters.keys())
         assert params == ["self", "context"]
 
     def test_execution_spec_run_kwarg_signature(self):
         """ExecutionSpec.run_kwarg() accepts **kwargs."""
-        import inspect
         params = list(inspect.signature(ExecutionSpec.run_kwarg).parameters.keys())
         assert "self" in params
         assert "kwargs" in params
@@ -568,42 +572,36 @@ class TestAntiPatterns:
         """agent('prompt', stream=True) raises TypeError."""
         agent = Agent(name="test", instructions="test")
 
-        # This should raise TypeError - stream is not a valid parameter
-        try:
+        with pytest.raises(TypeError):
             agent("prompt", stream=True)  # type: ignore
-            assert False, "Should have raised TypeError"
-        except TypeError:
-            pass  # Expected
 
     def test_agent_call_rejects_isolated_param(self):
         """agent('prompt', isolated=True) raises TypeError."""
         agent = Agent(name="test", instructions="test")
 
-        try:
+        with pytest.raises(TypeError):
             agent("prompt", isolated=True)  # type: ignore
-            assert False, "Should have raised TypeError"
-        except TypeError:
-            pass  # Expected
 
     def test_agent_call_rejects_silent_param(self):
         """agent('prompt', silent=True) raises TypeError."""
         agent = Agent(name="test", instructions="test")
 
-        try:
+        with pytest.raises(TypeError):
             agent("prompt", silent=True)  # type: ignore
-            assert False, "Should have raised TypeError"
-        except TypeError:
-            pass  # Expected
 
     def test_agent_call_rejects_max_turns_param(self):
         """agent('prompt', max_turns=5) raises TypeError."""
         agent = Agent(name="test", instructions="test")
 
-        try:
+        with pytest.raises(TypeError):
             agent("prompt", max_turns=5)  # type: ignore
-            assert False, "Should have raised TypeError"
-        except TypeError:
-            pass  # Expected
+
+    def test_agent_call_rejects_snapshot_param(self):
+        """agent('prompt', snapshot=True) raises TypeError."""
+        agent = Agent(name="test", instructions="test")
+
+        with pytest.raises(TypeError):
+            agent("prompt", snapshot=True)  # type: ignore
 
 
 class TestRunConfigVariants:
@@ -663,7 +661,7 @@ class TestContextWithStream:
         spec = agent("prompt").context(ctx).stream()
 
         assert spec.run_kwargs.get("context") is ctx
-        assert spec.streaming is True
+        assert spec.is_streaming is True
 
     def test_stream_then_context(self):
         """stream().context() works (order independence)."""
@@ -677,4 +675,4 @@ class TestContextWithStream:
         spec = agent("prompt").stream().context(ctx)
 
         assert spec.run_kwargs.get("context") is ctx
-        assert spec.streaming is True
+        assert spec.is_streaming is True
