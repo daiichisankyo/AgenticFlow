@@ -127,6 +127,8 @@ result = await agent("prompt").run_config(RunConfig(model="gpt-5.2")).stream()
 
 No AF-specific configuration needed — the SDK handles provider routing via model name prefixes. See [Multi-Provider Guide](https://daiichisankyo.github.io/AgenticFlow/guides/multi-provider/).
 
+> **Security:** LiteLLM 1.82.7/1.82.8 were compromised on PyPI (credential exfiltration). Install with `pip install "litellm>=1.82.6,!=1.82.7,!=1.82.8"` and audit before upgrading.
+
 ---
 
 ## 📋 Requirements

@@ -77,5 +77,9 @@ When using LiteLLM, provider API keys are read from environment variables. Refer
 ## Troubleshooting
 
 - `Unknown model prefix`: Ensure the model name starts with a supported prefix (for LiteLLM use `litellm/`).
-- `ModuleNotFoundError: litellm`: Install LiteLLM with `pip install litellm`.
+- `ModuleNotFoundError: litellm`: Install LiteLLM with `pip install "litellm>=1.82.6,!=1.82.7,!=1.82.8"`.
 - `Authentication failed`: Check provider API keys in your environment.
+
+## Security Advisory
+
+**LiteLLM versions 1.82.7 and 1.82.8 were compromised.** These versions were published only to PyPI (not to GitHub) and contained malicious code that exfiltrated SSH keys, API keys, cloud credentials (AWS/GCP/Azure), and cryptocurrency wallet data. Always pin to a verified version and audit before upgrading.

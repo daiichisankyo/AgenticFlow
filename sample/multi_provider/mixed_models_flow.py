@@ -1,8 +1,12 @@
 """AF: Mix OpenAI and Anthropic in a single flow.
 
 Prerequisites:
-    pip install litellm
+    pip install "litellm>=1.82.6,!=1.82.7,!=1.82.8"
     export ANTHROPIC_API_KEY="sk-ant-..."
+
+Security:
+    litellm 1.82.7/1.82.8 were compromised on PyPI (credential exfiltration).
+    Always pin to a verified version.
 
 Usage:
     python sample/multi_provider/mixed_models_flow.py
