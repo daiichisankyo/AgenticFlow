@@ -28,6 +28,7 @@ async def my_flow(user_message: str) -> str:
 
 - Sessions — Injected by Runner
 - Handlers — Injected by Runner
+- RunConfig (sandbox transport, tracing, model overrides) — Injected by Runner via `default_run_config`
 - ChatKit — Integrated at Runner level
 
 This separation keeps business logic clean.
@@ -38,12 +39,13 @@ A Runner wraps a Flow and provides the execution environment:
 
 ```python
 import agentic_flow as af
-from agents import SQLiteSession
+from agents import RunConfig, SQLiteSession
 
 runner = af.Runner(
     flow=my_flow,
     session=SQLiteSession("chat.db"),
     handler=my_handler,
+    default_run_config=RunConfig(...),
 )
 
 result = await runner("Hello!")
@@ -55,6 +57,7 @@ result = await runner("Hello!")
 |:---------------|:----|
 | Session injection | Via `contextvars` |
 | Handler injection | Via `contextvars` |
+| RunConfig injection (`default_run_config`) | Via `contextvars` (`current_run_config`) |
 | Flow execution | Calls `await self.flow(user_message)` |
 
 ## How Injection Works
@@ -63,16 +66,16 @@ Runner uses Python's `contextvars` to inject dependencies:
 
 ```python
 async def __call__(self, user_message: str) -> Any:
-    # Inject session
+    # Inject session, handler, and default run_config
     session_token = current_session.set(self.session)
-
-    # Inject handler
     handler_token = current_handler.set(self.handler)
+    run_config_token = current_run_config.set(self.default_run_config)
 
     try:
         return await self.flow(user_message)
     finally:
-        # Clean up
+        # Clean up (reverse order)
+        current_run_config.reset(run_config_token)
         current_handler.reset(handler_token)
         current_session.reset(session_token)
 ```
@@ -82,6 +85,15 @@ This means:
 - Flow code never sees `session` or `handler` directly
 - `af.ExecutionSpec.execute()` reads them from context when needed
 - Context is properly scoped and cleaned up
+
+## ChatKit Mode
+
+`af.chatkit.run_with_chatkit_context(runner, thread, store, context, msg)`
+does **not** bypass `Runner`. It adds `current_chatkit_context` and then
+delegates flow execution to `Runner.__call__`, so `session`, `handler`, and
+`default_run_config` are injected exactly as in non-ChatKit mode. This is
+why `Runner(default_run_config=RunConfig(sandbox=SandboxRunConfig(...)))` —
+required by `af.SandboxAgent` — works identically through ChatKit.
 
 ## Synchronous Execution
 
@@ -110,7 +122,7 @@ You can use agents without Runner — they'll just lack session context:
 ```python
 import agentic_flow as af
 
-assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.5")
 
 # Works, but no session
 result = await assistant("Hello")

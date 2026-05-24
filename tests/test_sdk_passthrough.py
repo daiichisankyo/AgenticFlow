@@ -17,6 +17,12 @@ from agents import function_tool
 from agentic_flow import Agent, Runner, phase
 from agentic_flow.types import AgentResult
 
+# Module-level marker: every test in this file issues real LLM calls
+# (tools and handoffs require actual model invocation).
+# Default `uv run pytest` skips this; opt in with `-m integration` or
+# `AF_RUN_INTEGRATION=1`.
+pytestmark = pytest.mark.integration
+
 
 @function_tool
 def get_current_weather(location: str) -> str:
@@ -38,7 +44,7 @@ class TestToolsParameter:
         agent = Agent(
             name="tool_agent",
             instructions="Use tools when needed.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather],
         )
 
@@ -50,7 +56,7 @@ class TestToolsParameter:
         agent = Agent(
             name="tool_agent",
             instructions="Use tools.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather, search_database],
         )
 
@@ -62,7 +68,7 @@ class TestToolsParameter:
         agent = Agent(
             name="no_tools",
             instructions="No tools.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         assert agent.sdk_kwargs.get("tools") is None
@@ -73,7 +79,7 @@ class TestToolsParameter:
         agent = Agent(
             name="weather_agent",
             instructions="Use get_current_weather tool for weather questions.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather],
         )
 
@@ -88,7 +94,7 @@ class TestToolsParameter:
         agent = Agent(
             name="weather_agent",
             instructions="Use get_current_weather tool. Be concise.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather],
         )
 
@@ -113,13 +119,13 @@ class TestHandoffsParameter:
         specialist = Agent(
             name="specialist",
             instructions="I am a specialist.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         triage = Agent(
             name="triage",
             instructions="Route to specialist.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             handoffs=[specialist],
         )
 
@@ -131,13 +137,13 @@ class TestHandoffsParameter:
         specialist = Agent(
             name="specialist",
             instructions="Specialist.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         triage = Agent(
             name="triage",
             instructions="Route.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             handoffs=[specialist],
         )
 
@@ -149,7 +155,7 @@ class TestHandoffsParameter:
         agent = Agent(
             name="no_handoffs",
             instructions="No handoffs.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         assert agent.sdk_kwargs.get("handoffs") is None
@@ -160,13 +166,13 @@ class TestHandoffsParameter:
         billing_agent = Agent(
             name="billing",
             instructions="You handle billing questions. Say 'BILLING HANDLED'.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         triage_agent = Agent(
             name="triage",
             instructions="Triage agent. For billing, hand off to billing agent.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             handoffs=[billing_agent],
         )
 
@@ -189,13 +195,13 @@ class TestToolsAndHandoffsCombined:
         specialist = Agent(
             name="specialist",
             instructions="Specialist.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         coordinator = Agent(
             name="coordinator",
             instructions="Coordinate using tools and handoffs.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather, search_database],
             handoffs=[specialist],
         )
@@ -212,7 +218,7 @@ class TestToolsAndHandoffsCombined:
         specialist = Agent(
             name="weather_specialist",
             instructions="You are a weather specialist. Provide detailed forecasts.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather],
         )
 
@@ -221,7 +227,7 @@ class TestToolsAndHandoffsCombined:
             instructions=(
                 "You coordinate requests. For weather, use tool or hand off to specialist."
             ),
-            model="gpt-5.2",
+            model="gpt-5.5",
             tools=[get_current_weather],
             handoffs=[specialist],
         )

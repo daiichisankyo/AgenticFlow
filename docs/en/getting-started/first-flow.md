@@ -22,7 +22,7 @@ import agentic_flow as af
 assistant = af.Agent(
     name="assistant",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 ```
 
@@ -60,12 +60,16 @@ result = await assistant("Hello").silent()
 # Isolated mode (no session context)
 result = await assistant("Hello").isolated()
 
+# Snapshot mode (read-only context, safe for parallel)
+result = await assistant("Hello").snapshot()
+
 # Limit execution turns
 result = await assistant("Hello").max_turns(5)
 
 # Combine them (order doesn't matter)
 result = await assistant("Hello").stream().silent()
 result = await assistant("Hello").stream().max_turns(10)
+result = await assistant("Hello").snapshot().stream()
 ```
 
 ## Step 5: Add Phases
@@ -109,13 +113,15 @@ result = await runner("Hello!")
 
 ## Step 7: Add a Handler (Optional)
 
-For CLI or custom output, add a handler:
+For CLI or custom output, add a handler. Handlers receive `AgentResult` with the full output:
 
 ```python
+import agentic_flow as af
+
 def my_handler(event):
-    # Handle streaming events
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+    # Agent result — full text delivered once per agent call
+    if isinstance(event, af.AgentResult):
+        print(event.content)
 
 runner = af.Runner(
     flow=my_flow,
@@ -134,7 +140,7 @@ from agents import SQLiteSession
 assistant = af.Agent(
     name="assistant",
     instructions="You are a thoughtful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 # Flow
@@ -153,8 +159,12 @@ async def thoughtful_flow(user_message: str) -> str:
 
 # Handler for CLI output
 def print_handler(event):
-    if hasattr(event, "data") and hasattr(event.data, "delta"):
-        print(event.data.delta, end="", flush=True)
+    if isinstance(event, af.PhaseStarted):
+        print(f"\n[{event.label}]")
+    elif isinstance(event, af.PhaseEnded):
+        print(f"[/{event.label}] ({event.elapsed_ms}ms)")
+    elif isinstance(event, af.AgentResult):
+        print(event.content)
 
 # Runner
 runner = af.Runner(
@@ -166,7 +176,6 @@ runner = af.Runner(
 # Run
 if __name__ == "__main__":
     result = runner.run_sync("Explain why the sky is blue.")
-    print()  # Newline after streaming output
 ```
 
 ## Summary
@@ -176,7 +185,7 @@ if __name__ == "__main__":
 | `Agent` | Wraps SDK Agent, makes it callable |
 | `agent(prompt)` | Creates `ExecutionSpec` (no execution) |
 | `await spec` | Executes the agent |
-| `.stream()` / `.silent()` / `.isolated()` | Modifiers (no execution) |
+| `.stream()` / `.silent()` / `.isolated()` / `.snapshot()` | Modifiers (no execution) |
 | `phase()` | Semantic boundary with automatic cleanup |
 | `Runner` | Executes flows with session injection |
 

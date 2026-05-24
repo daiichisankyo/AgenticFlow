@@ -55,28 +55,28 @@ from agentic_flow import Agent
 assistant = Agent(
     name="assistant",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 ```
 
 Rules:
 - Use `Agent` from `agentic_flow`
-- Model MUST be `"gpt-5.2"` (see Model Normalization below)
+- Model MUST be `"gpt-5.5"` (see Model Normalization below)
 - No manual OpenAI client creation
 
 ### Model Normalization
 
-**All models in source code are normalized to `gpt-5.2`.**
+**All models in source code are normalized to `gpt-5.5`.**
 
 This is an intentional transformation, not a bug:
 
 | Source Model | Transformed To |
 |--------------|----------------|
-| `gpt-4.1` | `gpt-5.2` |
-| `gpt-4.1-mini` | `gpt-5.2` |
-| `gpt-4o` | `gpt-5.2` |
-| `gpt-4o-mini` | `gpt-5.2` |
-| Any other model | `gpt-5.2` |
+| `gpt-4.1` | `gpt-5.5` |
+| `gpt-4.1-mini` | `gpt-5.5` |
+| `gpt-4o` | `gpt-5.5` |
+| `gpt-4o-mini` | `gpt-5.5` |
+| Any other model | `gpt-5.5` |
 
 Reflector: Do NOT flag model changes as issues. This is project standard.
 
@@ -315,7 +315,7 @@ These differences between source and output are **intentional and correct**:
 
 | Transformation | Reason |
 |----------------|--------|
-| Model → `gpt-5.2` | Project standard model |
+| Model → `gpt-5.5` | Project standard model |
 | `store=True` removed | Session handles persistence |
 | `trace()` removed | Not needed in Agentic Flow |
 | `conversation_history` removed | Session handles automatically |

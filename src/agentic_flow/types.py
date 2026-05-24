@@ -1,4 +1,4 @@
-"""Event types for AF v0.35."""
+"""Event types for AF."""
 
 import time
 from collections.abc import Callable

@@ -20,6 +20,11 @@ from pydantic import BaseModel
 from agentic_flow import Agent, Runner, phase, reasoning
 from tests.conftest import Decision
 
+# Module-level marker: every test in this file issues real LLM calls.
+# Default `uv run pytest` skips this; opt in with `-m integration` or
+# `AF_RUN_INTEGRATION=1`.
+pytestmark = pytest.mark.integration
+
 
 class ContentAnalysis(BaseModel):
     """Content analysis result."""
@@ -45,14 +50,14 @@ class TestTypedDataTransformation:
         analyzer = Agent(
             name="analyzer",
             instructions="Analyze input. Return category, confidence, keywords.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=ContentAnalysis,
         )
 
         decider = Agent(
             name="decider",
             instructions="Based on analysis, decide action (approve/reject).",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Decision,
         )
 
@@ -86,20 +91,20 @@ class TestTypedDataTransformation:
         analyzer = Agent(
             name="classifier",
             instructions="Return category as 'urgent' or 'normal' with confidence 0-1.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=ContentAnalysis,
         )
 
         urgent_handler = Agent(
             name="urgent",
             instructions="Handle urgent case. Reply with URGENT HANDLED.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         normal_handler = Agent(
             name="normal",
             instructions="Handle normal case. Reply with NORMAL HANDLED.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(user_input: str) -> str:
@@ -124,7 +129,7 @@ class TestTypedDataTransformation:
         analyzer = Agent(
             name="typed",
             instructions="Return category, confidence, keywords.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=ContentAnalysis,
         )
 
@@ -148,7 +153,7 @@ class TestControlStructures:
         processor = Agent(
             name="processor",
             instructions="Process item and return brief result.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(user_input: str) -> str:
@@ -174,19 +179,19 @@ class TestControlStructures:
         classifier = Agent(
             name="classifier",
             instructions="Reply COMPLEX if question needs deep analysis, else SIMPLE.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         simple_handler = Agent(
             name="simple",
             instructions="Give a brief answer.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         complex_handler = Agent(
             name="complex",
             instructions="Give a detailed analysis.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             model_settings=reasoning("low"),
         )
 
@@ -213,14 +218,14 @@ class TestControlStructures:
         reviewer = Agent(
             name="reviewer",
             instructions=("Review text. Set approved=true if good, false if needs work."),
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Review,
         )
 
         refiner = Agent(
             name="refiner",
             instructions="Improve text based on feedback.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(user_input: str) -> str:
@@ -255,7 +260,7 @@ class TestControlStructures:
         searcher = Agent(
             name="searcher",
             instructions="Search for information about the topic. Reply briefly.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(user_input: str) -> str:
@@ -281,7 +286,7 @@ class TestControlStructures:
         searcher = Agent(
             name="searcher",
             instructions="Search for information about the topic. Reply briefly.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(user_input: str) -> str:
@@ -307,7 +312,7 @@ class TestControlStructures:
         processor = Agent(
             name="processor",
             instructions="Process item briefly. Reply with one word.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(user_input: str) -> str:

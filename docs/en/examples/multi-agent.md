@@ -27,14 +27,14 @@ classifier = af.Agent(
     SIMPLE: Greetings, simple questions, basic information
     COMPLEX: Research questions, analysis, comparisons
     Respond with only SIMPLE or COMPLEX.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 researcher = af.Agent(
     name="researcher",
     instructions="""Research the given topic thoroughly.
     Provide detailed findings with sources when possible.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),
 )
 
@@ -42,7 +42,7 @@ responder = af.Agent(
     name="responder",
     instructions="""Provide a clear, helpful response to the user.
     If research findings are provided, base your response on them.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 
@@ -118,7 +118,7 @@ classifier = af.Agent(
     name="classifier",
     instructions="Classify the request.",
     output_type=Classification,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 async def typed_flow(user_message: str) -> str:

@@ -21,7 +21,7 @@ def create_agent(name: str, instructions: str) -> Agent:
     return Agent(
         name=name,
         instructions=instructions,
-        model="gpt-5.2",
+        model="gpt-5.5",
         model_settings=ModelSettings(
             store=True,
             reasoning=Reasoning(effort="medium", summary="auto"),

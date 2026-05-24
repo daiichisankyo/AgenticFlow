@@ -22,8 +22,8 @@ The SDK resolves the model via its default `MultiProvider`. No AF-specific confi
 
 The SDK uses `ModelProvider` to resolve a model name to a `Model` implementation. By default, `RunConfig.model_provider` is a `MultiProvider`, which interprets prefixes such as:
 
-- `gpt-5.2` (OpenAI default)
-- `openai/gpt-5.2` (OpenAI explicit)
+- `gpt-5.5` (OpenAI default)
+- `openai/gpt-5.5` (OpenAI explicit)
 - `litellm/anthropic/claude-sonnet-4-20250514` (Anthropic via LiteLLM)
 
 AF simply passes the `model` string through to the SDK.
@@ -36,7 +36,7 @@ Override the model at execution time without rebuilding the agent:
 from agents import RunConfig
 
 result = await agent("prompt").run_config(
-    RunConfig(model="gpt-5.2")
+    RunConfig(model="gpt-5.5")
 ).stream()
 ```
 

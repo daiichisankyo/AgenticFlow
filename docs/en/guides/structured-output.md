@@ -18,7 +18,7 @@ class Analysis(BaseModel):
 analyzer = af.Agent(
     name="analyzer",
     instructions="Analyze the sentiment of the given text.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     output_type=Analysis,  # Typed output
 )
 
@@ -34,14 +34,14 @@ print(result.keywords)      # ["love", "product"]
 
 ```python
 # T = str (default)
-assistant: af.Agent[str] = af.Agent(name="assistant", instructions="...", model="gpt-5.2")
+assistant: af.Agent[str] = af.Agent(name="assistant", instructions="...", model="gpt-5.5")
 
 # T = Analysis
 analyzer: af.Agent[Analysis] = af.Agent(
     name="analyzer",
     instructions="...",
     output_type=Analysis,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 ```
 
@@ -72,7 +72,7 @@ researcher = af.Agent(
     name="researcher",
     instructions="Research the topic and provide structured findings.",
     output_type=ResearchResult,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 result: ResearchResult = await researcher("quantum computing").stream()
@@ -100,7 +100,7 @@ analyzer = af.Agent(
     name="analyzer",
     instructions="Classify sentiment.",
     output_type=SentimentAnalysis,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 result = await analyzer("Great product!")
@@ -122,7 +122,7 @@ extractor = af.Agent(
     name="extractor",
     instructions="Extract user information from text.",
     output_type=UserProfile,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 result = await extractor("My name is Alice, I'm 30.")
@@ -149,14 +149,14 @@ triager = af.Agent(
     name="triager",
     instructions="Categorize and prioritize the request.",
     output_type=Triage,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 responder = af.Agent(
     name="responder",
     instructions="Respond based on the triage.",
     output_type=Response,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 async def support_flow(message: str) -> str:
@@ -201,7 +201,7 @@ result: Analysis = await analyzer("text").stream()
 
 ```python
 # AF
-af.Agent(name="...", instructions="...", output_type=MyModel, model="gpt-5.2")
+af.Agent(name="...", instructions="...", output_type=MyModel, model="gpt-5.5")
 
 # Equivalent SDK call
 agents.Agent(name="...", instructions="...", output_type=MyModel)

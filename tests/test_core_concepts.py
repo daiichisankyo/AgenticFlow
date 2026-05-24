@@ -18,6 +18,11 @@ from agentic_flow import Agent, ExecutionSpec, Runner, phase, reasoning
 from agentic_flow.agent import current_handler
 from agentic_flow.types import AgentResult
 
+# Module-level marker: every test in this file issues real LLM calls.
+# Default `uv run pytest` skips this; opt in with `-m integration` or
+# `AF_RUN_INTEGRATION=1`.
+pytestmark = pytest.mark.integration
+
 
 class Sentiment(BaseModel):
     """Test Pydantic model."""
@@ -34,7 +39,7 @@ class TestAgent:
         agent = Agent(
             name="str_agent",
             instructions="Reply OK",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         assert agent.sdk_kwargs.get("name") == "str_agent"
@@ -45,7 +50,7 @@ class TestAgent:
         agent = Agent(
             name="typed_agent",
             instructions="Return sentiment",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Sentiment,
         )
 
@@ -53,7 +58,7 @@ class TestAgent:
 
     def test_callable_returns_execution_spec(self):
         """agent(prompt) returns ExecutionSpec, not result."""
-        agent = Agent(name="test", instructions="OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="OK", model="gpt-5.5")
 
         spec = agent("hello")
 
@@ -63,7 +68,7 @@ class TestAgent:
 
     def test_stream_chain(self):
         """agent(prompt).stream() sets is_streaming=True."""
-        agent = Agent(name="test", instructions="OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="OK", model="gpt-5.5")
 
         spec = agent("hello").stream()
 
@@ -71,7 +76,7 @@ class TestAgent:
 
     def test_isolated_chain(self):
         """agent(prompt).isolated() sets is_isolated=True."""
-        agent = Agent(name="test", instructions="OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="OK", model="gpt-5.5")
 
         spec = agent("hello").isolated()
 
@@ -79,7 +84,7 @@ class TestAgent:
 
     def test_chain_combinations(self):
         """Chaining .isolated().stream() works."""
-        agent = Agent(name="test", instructions="OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="OK", model="gpt-5.5")
 
         spec = agent("hello").isolated().stream()
 
@@ -95,7 +100,7 @@ class TestAgent:
         agent = Agent(
             name="thinker",
             instructions="Think step by step. What is 7 * 8?",
-            model="gpt-5.2",
+            model="gpt-5.5",
             model_settings=ModelSettings(
                 reasoning=Reasoning(effort="low", summary="auto"),
             ),
@@ -117,7 +122,7 @@ class TestAgent:
         agent = Agent(
             name="thinker",
             instructions="Think step by step. What is 9 * 7?",
-            model="gpt-5.2",
+            model="gpt-5.5",
             model_settings=reasoning("low"),
         )
 
@@ -163,7 +168,7 @@ class TestPhase:
     @pytest.mark.asyncio
     async def test_phase_handler_inheritance(self, handler_log):
         """Agent inside phase inherits handler from Runner and receives AgentResult."""
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -226,7 +231,7 @@ class TestRunner:
     @pytest.mark.asyncio
     async def test_runner_basic(self):
         """Runner executes flow."""
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             return await agent(msg)
@@ -242,7 +247,7 @@ class TestRunner:
         agent = Agent(
             name="memory",
             instructions="Remember what user says.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(msg: str) -> str:
@@ -259,7 +264,7 @@ class TestRunner:
     @pytest.mark.asyncio
     async def test_runner_callable(self):
         """Runner is callable with user message."""
-        agent = Agent(name="test", instructions="Echo input", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Echo input", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             return await agent(msg)
@@ -272,7 +277,7 @@ class TestRunner:
     @pytest.mark.asyncio
     async def test_runner_without_session(self):
         """Runner without Session works (stateless)."""
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             return await agent(msg)
@@ -285,8 +290,8 @@ class TestRunner:
     @pytest.mark.asyncio
     async def test_runner_multi_phase_flow(self, handler_log):
         """Runner executes multi-phase flow."""
-        agent1 = Agent(name="a1", instructions="Say PHASE1", model="gpt-5.2")
-        agent2 = Agent(name="a2", instructions="Say PHASE2", model="gpt-5.2")
+        agent1 = Agent(name="a1", instructions="Say PHASE1", model="gpt-5.5")
+        agent2 = Agent(name="a2", instructions="Say PHASE2", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Phase1"):

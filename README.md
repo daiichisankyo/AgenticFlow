@@ -1,9 +1,12 @@
 # AF - Agentic Flow Framework
 
-[![PyPI](https://img.shields.io/pypi/v/ds-agentic-flow.svg)](https://pypi.org/project/ds-agentic-flow/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docs](https://img.shields.io/badge/docs-online-green.svg)](https://daiichisankyo.github.io/AgenticFlow/)
+
+> **🚀 v0.38 — SDK 0.14 Refresh.** AF now targets `openai-agents>=0.14.0,<0.15` (was `>=0.3.2`). Adds **`af.SandboxAgent`** for persistent containerized workspaces, drop-in support for the SDK's new session backends (`SQLAlchemy` / `MongoDB` / `Redis` / `Dapr` / `encrypted`), and the new `RunConfig` fields surfaced in 0.14. Existing `af.Agent` flows are unchanged. → [What's new](https://daiichisankyo.github.io/AgenticFlow/refresh-0.14/)
+>
+> Examples now default to **GPT-5.5** (released 2026-04-23). No code change required — just pass `model="gpt-5.5"`.
 
 **Write agent workflows like regular Python code.**
 
@@ -74,9 +77,9 @@ result = await runner(query)
 
 - **Callable agents** - `agent(prompt).stream()` like PyTorch modules
 - **Workflow phases** - Structure and visibility for multi-step processes
-- **Automatic streaming** - Real-time output with zero configuration
+- **Streaming mode** - `.stream()` for faster first-token via streaming API
 - **Session injection** - Conversation persistence without global state
-- **ChatKit integration** - Production-ready UI streaming
+- **ChatKit integration** - Production-ready UI with full-text display
 
 ---
 
@@ -115,19 +118,62 @@ Use any LLM provider through the SDK's built-in multi-provider system:
 
 ```python
 # OpenAI (default)
-openai_agent = af.Agent(name="openai", model="gpt-5.2", instructions="...")
+openai_agent = af.Agent(name="openai", model="gpt-5.5", instructions="...")
 
 # Anthropic via LiteLLM
 claude_agent = af.Agent(name="claude", model="litellm/anthropic/claude-sonnet-4-20250514", instructions="...")
 
 # Runtime model switch
 from agents import RunConfig
-result = await agent("prompt").run_config(RunConfig(model="gpt-5.2")).stream()
+result = await agent("prompt").run_config(RunConfig(model="gpt-5.5")).stream()
 ```
 
 No AF-specific configuration needed — the SDK handles provider routing via model name prefixes. See [Multi-Provider Guide](https://daiichisankyo.github.io/AgenticFlow/guides/multi-provider/).
 
 > **Security:** LiteLLM 1.82.7/1.82.8 were compromised on PyPI (credential exfiltration). Install with `pip install "litellm>=1.82.6,!=1.82.7,!=1.82.8"` and audit before upgrading.
+
+---
+
+## 🆕 New: Sandbox Agents — Agents That Live in a Workspace
+
+`agents.sandbox.SandboxAgent` (introduced in openai-agents 0.14) gives an agent a **persistent containerized workspace** — files survive across calls, state can be snapshotted and resumed. AF wraps it as `af.SandboxAgent`, which is an `af.Agent` subclass: every existing modifier (`.stream()`, `.silent()`, `.snapshot()`, `.isolated()`, `.max_turns()`, `.context()`, `.run_config()`) just works.
+
+```python
+import agentic_flow as af
+from agents import RunConfig, SQLiteSession
+from agents.sandbox import Manifest, SandboxRunConfig
+
+# Plan agent: thinking only — no sandbox needed
+planner = af.Agent(
+    name="planner",
+    instructions="Read the spec and produce a step-by-step implementation plan.",
+    model="gpt-5.5",
+)
+
+# Coder agent: persistent workspace declared as part of agent identity
+coder = af.SandboxAgent(
+    name="coder",
+    instructions="Implement the plan in Python.",
+    model="gpt-5.5",
+    default_manifest=Manifest(version="1", root="/work", entries=[]),
+)
+
+# Flow is just business logic — it does not know about execution environment
+async def implement_flow(spec: str) -> str:
+    async with af.phase("Plan"):
+        plan = await planner(spec).stream()
+    async with af.phase("Implement", persist=True):
+        return await coder(plan).stream()
+
+# Runner injects the execution environment (Session + sandbox transport) via contextvars
+runner = af.Runner(
+    flow=implement_flow,
+    session=SQLiteSession("chat.db"),
+    default_run_config=RunConfig(sandbox=SandboxRunConfig(...)),
+)
+```
+
+`Manifest` is the workspace declaration and belongs to the agent (WHAT). `SandboxRunConfig` is the runtime transport (which sandbox client, which concurrency limits, which snapshot to resume) and belongs to the Runner (WHERE-environment). Per-call overrides remain available via the existing `.run_config()` modifier — Runner default + ExecutionSpec modifier compose so that the most-specific setting wins. `Manifest`, `SandboxRunConfig`, and the memory/snapshot configs come straight from the SDK; AF intentionally doesn't re-wrap them. [Learn more →](https://daiichisankyo.github.io/AgenticFlow/concepts/sandbox/)
 
 ---
 
@@ -148,13 +194,13 @@ No AF-specific configuration needed — the SDK handles provider routing via mod
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add AF to your project
-uv add ds-agentic-flow
+uv add git+https://github.com/daiichisankyo/AgenticFlow.git
 ```
 
 ### With pip (alternative)
 
 ```bash
-pip install ds-agentic-flow
+pip install git+https://github.com/daiichisankyo/AgenticFlow.git
 ```
 
 ### Set your API key
@@ -183,13 +229,13 @@ import agentic_flow as af
 researcher = af.Agent(
     name="researcher",
     instructions="Research the topic thoroughly.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 writer = af.Agent(
     name="writer",
     instructions="Write clear, engaging content.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 # Define workflow as a regular async function
@@ -214,6 +260,7 @@ article = await runner("quantum computing")
 AF is built on three primitives:
 
 - **Agent** - Callable wrapper around SDK Agent. Returns `ExecutionSpec` for deferred execution.
+- **SandboxAgent** - Subclass of `Agent` that constructs `agents.sandbox.SandboxAgent` (persistent workspace, snapshots, sandbox memory). Uses the same `ExecutionSpec` and modifiers.
 - **ExecutionSpec** - Lazy specification configured with modifiers (`.stream()`, `.isolated()`, `.snapshot()`, `.silent()`, `.max_turns()`)
 - **phase** - Context manager for workflow boundaries. Controls session persistence with `persist=True`.
 
@@ -283,20 +330,17 @@ async def refine(draft: str) -> str:
 import asyncio
 
 async def parallel_analysis(data: str) -> dict:
-    # persist=True saves the final response to session
-    # snapshot() reads phase context but doesn't write (concurrent-safe)
     async with af.phase("Parallel Analysis", persist=True):
+        # snapshot() reads phase context but doesn't write (concurrent-safe)
         sentiment, entities, summary = await asyncio.gather(
             sentiment_agent(data).snapshot(),
             entity_agent(data).snapshot(),
             summary_agent(data).snapshot(),
         )
 
-    return {
-        "sentiment": sentiment,
-        "entities": entities,
-        "summary": summary,
-    }
+        return await synthesizer(
+            f"Sentiment: {sentiment}\nEntities: {entities}\nSummary: {summary}"
+        ).stream()
 ```
 
 ---
@@ -364,7 +408,7 @@ uv run --group sample python sample/quickstart.py
 Demonstrates:
 1. Flow & Runner separation
 2. Declaration vs execution (`agent(prompt)` returns spec, `await` executes)
-3. Modifiers (`.stream()`, `.isolated()`, `.silent()`, `.max_turns()`)
+3. Modifiers (`.stream()`, `.isolated()`, `.silent()`)
 4. Typed output with Pydantic
 
 ### Guide TUI

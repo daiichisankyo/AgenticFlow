@@ -21,7 +21,7 @@ from agentic_flow import Agent
 
 from .types import ConversationSummary
 
-MODEL = os.getenv("MODEL_NAME", "gpt-5.2")
+MODEL = os.getenv("MODEL_NAME", "gpt-5.5")
 
 summarizer = Agent(
     name="summarizer",

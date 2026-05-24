@@ -54,7 +54,7 @@ chat_agent = Agent(
     instructions="""You are a helpful chat assistant.
 
 Your responses should be helpful, safe, and concise.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("low"),
     input_guardrails=[guardrails_check],
 )

@@ -2,6 +2,9 @@
 
 Modifiers configure execution behavior without triggering execution. They return a new `ExecutionSpec` with updated flags.
 
+!!! note "Modifiers apply to both `af.Agent` and `af.SandboxAgent`"
+    All modifiers below configure `ExecutionSpec`, which is returned by `af.Agent` *and* `af.SandboxAgent` (introduced with the SDK 0.14 refresh). Sandbox runtime configuration travels through `RunConfig(sandbox=SandboxRunConfig(...))` — no separate sandbox modifier exists. The recommended injection point is `af.Runner(default_run_config=...)` (treated as execution environment, like `Session`); the `.run_config()` modifier below remains available as a per-call override.
+
 ## Modifier Categories
 
 | Axis | Modifiers | Purpose |
@@ -217,7 +220,7 @@ result = await agent("prompt").run_config(
 
 # Override model for this execution
 result = await agent("prompt").run_config(
-    RunConfig(model="gpt-5.2-turbo")
+    RunConfig(model="gpt-5.5")
 )
 
 # Set workflow name for tracing

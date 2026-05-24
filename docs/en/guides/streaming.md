@@ -33,7 +33,7 @@ For command-line output, create a handler that receives `AgentResult`:
 ```python
 import agentic_flow as af
 
-assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.5")
 
 def cli_handler(event):
     # Agent completed — display full result
@@ -131,7 +131,7 @@ import agentic_flow as af
 agent = af.Agent(
     name="thinker",
     instructions="Think step by step.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),  # Helper for reasoning config
 )
 
@@ -150,14 +150,14 @@ import agentic_flow as af
 researcher = af.Agent(
     name="researcher",
     instructions="Research thoroughly.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),
 )
 
 responder = af.Agent(
     name="responder",
     instructions="Provide clear responses.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 

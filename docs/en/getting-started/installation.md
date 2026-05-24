@@ -15,13 +15,13 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add AF to your project
-uv add ds-agentic-flow
+uv add git+https://github.com/daiichisankyo/AgenticFlow.git
 ```
 
 ## Install with pip (alternative)
 
 ```bash
-pip install ds-agentic-flow
+pip install git+https://github.com/daiichisankyo/AgenticFlow.git
 ```
 
 This installs AF and its dependencies, including the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/).
@@ -65,8 +65,7 @@ uv run pytest
 # Run linter
 uv run ruff check src/
 
-# Build documentation
-uv sync --group docs
+# Build documentation (mkdocs-material lives in the dev group)
 uv run mkdocs serve
 ```
 
@@ -85,8 +84,7 @@ AgenticFlow/
 
 | Group | Purpose | Command |
 |-------|---------|---------|
-| `dev` | Testing, linting | `uv sync --group dev` |
-| `docs` | Documentation | `uv sync --group docs` |
+| `dev` | Testing, linting, docs (mkdocs-material) | `uv sync --group dev` |
 | `sample` | Sample apps | `uv sync --group sample` |
 
 Run sample applications:
@@ -104,7 +102,7 @@ import agentic_flow as af
 assistant = af.Agent(
     name="assistant",
     instructions="Say hello.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 async def greet(message: str) -> str:

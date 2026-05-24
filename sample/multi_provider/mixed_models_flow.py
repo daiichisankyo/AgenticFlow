@@ -18,7 +18,7 @@ import agentic_flow as af
 openai_agent = af.Agent(
     name="openai",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 claude_agent = af.Agent(

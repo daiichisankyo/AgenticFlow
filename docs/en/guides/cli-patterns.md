@@ -147,7 +147,7 @@ from rich.console import Console
 researcher = af.Agent(
     name="researcher",
     instructions="Research thoroughly.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),
 )
 

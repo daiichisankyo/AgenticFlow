@@ -17,13 +17,13 @@ import agentic_flow as af
 researcher = af.Agent(
     name="researcher",
     instructions="Research the given topic. Provide detailed findings.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 responder = af.Agent(
     name="responder",
     instructions="Based on research findings, provide a clear response to the user.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 ```
 
@@ -80,13 +80,13 @@ from agents import SQLiteSession
 researcher = af.Agent(
     name="researcher",
     instructions="Research the given topic. Provide detailed findings.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 responder = af.Agent(
     name="responder",
     instructions="Based on research findings, provide a clear response to the user.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 # Define flow
@@ -123,6 +123,7 @@ print(result)
 - [Your First Flow](first-flow.md) — Deeper dive into flow structure
 - [Concepts](../concepts/index.md) — Understand Call-Spec discipline
 - [Streaming](../guides/streaming.md) — Add real-time output
+- [Sandbox Agents](../concepts/sandbox.md) — Run agents in a persistent containerized workspace (SDK 0.14)
 
 ---
 

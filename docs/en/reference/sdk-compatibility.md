@@ -24,7 +24,7 @@ import agentic_flow as af
 agent = af.Agent(
     name="assistant",
     instructions="Help the user.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
     tools=[my_tool],
 )
@@ -35,7 +35,7 @@ from agents import Agent as SDKAgent
 sdk_agent = SDKAgent(
     name="assistant",
     instructions="Help the user.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
     tools=[my_tool],
 )
@@ -64,6 +64,7 @@ This means:
 | Feature | Purpose |
 |:--------|:--------|
 | `Agent[T]` | Callable wrapper, `agent(prompt) → ExecutionSpec[T]` |
+| `SandboxAgent[T]` | Subclass of `Agent[T]` that constructs `agents.sandbox.SandboxAgent` |
 | `ExecutionSpec[T]` | Declaration/execution separation |
 | `phase()` | Automatic boundary management |
 | `Runner` | Flow execution with injection |
@@ -127,7 +128,7 @@ def search_web(query: str) -> str:
 agent = af.Agent(
     name="researcher",
     instructions="Research topics using search.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     tools=[search_web],  # Passed to SDK
 )
 ```
@@ -149,7 +150,7 @@ agent = af.Agent(
     name="analyzer",
     instructions="Analyze sentiment.",
     output_type=Analysis,  # SDK handles this
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 ```
 
@@ -161,7 +162,7 @@ AF supports multiple LLM providers through the SDK's built-in multi-provider sys
 
 | Provider | Agent Definition |
 |:---------|:-----------------|
-| OpenAI (default) | `af.Agent(model="gpt-5.2")` |
+| OpenAI (default) | `af.Agent(model="gpt-5.5")` |
 | Anthropic (via LiteLLM) | `af.Agent(model="litellm/anthropic/claude-sonnet-4-20250514")` |
 | Google (via LiteLLM) | `af.Agent(model="litellm/google/gemini-2.0-flash")` |
 | Custom | `RunConfig(model_provider=MyProvider())` |
@@ -172,7 +173,7 @@ AF supports multiple LLM providers through the SDK's built-in multi-provider sys
 from agents import RunConfig
 
 result = await agent("prompt").run_config(
-    RunConfig(model="gpt-5.2")
+    RunConfig(model="gpt-5.5")
 ).stream()
 ```
 
@@ -182,19 +183,21 @@ For details, see the [Multi-Provider Guide](../guides/multi-provider.md).
 
 AF is tested with:
 
-- `openai-agents` >= 0.3.2
-- `openai-chatkit` >= 1.4.0, < 2 (for ChatKit integration)
+- `openai-agents` >= 0.14.0, < 0.15
+- `openai-chatkit` >= 1.5.3, < 2 (for ChatKit integration)
 
 For production, pin versions:
 
 ```toml
 [project]
 dependencies = [
-    "agentic-flow>=0.35",
-    "openai-agents>=0.3.2",
-    "openai-chatkit>=1.4.0,<2",
+    "ds-agentic-flow>=0.38",
+    "openai-agents>=0.14.0,<0.15",
+    "openai-chatkit>=1.5.3,<2",
 ]
 ```
+
+The SDK 0.14 line introduced `agents.sandbox` (Sandbox Agents) and populated `agents.extensions.memory` with multiple session backends (SQLAlchemy, MongoDB, Redis, Dapr, encrypted, async/advanced SQLite). Both are available to AF users without further wrapping. See the [Sandbox Agents concept page](../concepts/sandbox.md) for the AF surface, and the [SDK 0.14.6 Refresh Discovery Report](../refresh-0.14.md) for the verification trail.
 
 ## Execution-Time Pass-Through
 
@@ -218,11 +221,20 @@ In addition to Agent definition pass-through, AF supports execution-time paramet
 | `model` | Override agent's model | WHAT |
 | `model_settings` | Override model settings | WHAT |
 | `tracing_disabled` | Disable tracing | HOW |
+| `tracing` | Tracing configuration | HOW |
 | `trace_include_sensitive_data` | Include data in traces | HOW |
 | `workflow_name` | Name for tracing | HOW |
 | `input_guardrails` | Override input guardrails | LIMITS |
 | `output_guardrails` | Override output guardrails | LIMITS |
 | `hooks` | Run-level hooks | WHEN |
+| `sandbox` | Sandbox runtime config (`SandboxRunConfig`) | WHERE |
+| `session_settings` | Session behavior settings | WHERE |
+| `session_input_callback` | Customize session input | WHERE |
+| `nest_handoff_history` | Nest handoff history | WHAT |
+| `handoff_history_mapper` | Map handoff history | WHAT |
+| `call_model_input_filter` | Filter model input | WHAT |
+| `tool_error_formatter` | Format tool errors | LIMITS |
+| `reasoning_item_id_policy` | Reasoning item id policy | HOW |
 
 ### Example
 

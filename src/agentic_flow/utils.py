@@ -67,7 +67,7 @@ def reasoning(
         agent = Agent(
             name="thinker",
             instructions="Think step by step.",
-            model="o3",
+            model="gpt-5.5",
             model_settings=reasoning("high"),
         )
 

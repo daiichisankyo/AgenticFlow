@@ -13,9 +13,17 @@ from agentic_flow import Agent, Runner, phase
 from agentic_flow.agent import (
     current_handler,
     current_phase_session,
+    current_run_config,
     current_session,
 )
 from agentic_flow.phase import PhaseSession
+
+from .conftest import message_items
+
+# Module-level marker: every test in this file issues real LLM calls.
+# Default `uv run pytest` skips this; opt in with `-m integration` or
+# `AF_RUN_INTEGRATION=1`.
+pytestmark = pytest.mark.integration
 
 
 class TestPhaseSessionUpdate:
@@ -27,15 +35,16 @@ class TestPhaseSessionUpdate:
         agent = Agent(
             name="test_agent",
             instructions="Reply with one word.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async with phase("Test", share_context=True) as ctx:
             await agent("implicit test")
 
-            assert len(ctx.items) == 2
-            assert ctx.items[0]["role"] == "user"
-            assert ctx.items[1]["role"] == "assistant"
+            messages = message_items(ctx.items)
+            assert len(messages) == 2
+            assert messages[0]["role"] == "user"
+            assert messages[1]["role"] == "assistant"
 
 
 class TestIsolatedIgnoresAll:
@@ -51,7 +60,7 @@ class TestIsolatedIgnoresAll:
             agent = Agent(
                 name="test_agent",
                 instructions="Reply briefly.",
-                model="gpt-5.2",
+                model="gpt-5.5",
             )
             spec = agent("test").isolated()
             input_data, resolved_session = spec.resolve_input()
@@ -67,7 +76,7 @@ class TestIsolatedIgnoresAll:
         agent = Agent(
             name="test_agent",
             instructions="Reply briefly.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async with phase("Test", share_context=True) as ctx:
@@ -146,6 +155,81 @@ class TestRunnerHandlerInjection:
         assert current_phase_session.get() is None
 
 
+class TestRunnerRunConfigInjection:
+    """Runner must inject default_run_config via contextvars."""
+
+    @pytest.mark.asyncio
+    async def test_runner_without_default_run_config_keeps_contextvar_unset(self):
+        """Runner() without default_run_config does not set current_run_config."""
+        captured: object = "not-set"
+
+        async def flow(msg: str) -> str:
+            nonlocal captured
+            captured = current_run_config.get()
+            return "done"
+
+        chat = Runner(flow=flow)
+        await chat("test")
+
+        assert captured is None
+        assert current_run_config.get() is None
+
+    @pytest.mark.asyncio
+    async def test_runner_injects_default_run_config(self):
+        """Runner(default_run_config=rc) makes rc visible inside flow."""
+        from agents import RunConfig
+
+        rc = RunConfig()
+        captured = None
+
+        async def flow(msg: str) -> str:
+            nonlocal captured
+            captured = current_run_config.get()
+            return "done"
+
+        chat = Runner(flow=flow, default_run_config=rc)
+        await chat("test")
+
+        assert captured is rc
+
+    @pytest.mark.asyncio
+    async def test_runner_resets_run_config_after_flow(self):
+        """After flow returns, current_run_config is reset to None."""
+        from agents import RunConfig
+
+        async def flow(msg: str) -> str:
+            return "done"
+
+        chat = Runner(flow=flow, default_run_config=RunConfig())
+        await chat("test")
+
+        assert current_run_config.get() is None
+
+    @pytest.mark.asyncio
+    async def test_nested_phases_share_runner_run_config(self):
+        """Nested phases see the same Runner-injected run_config."""
+        from agents import RunConfig
+
+        rc = RunConfig()
+        outer_captured = None
+        inner_captured = None
+
+        async def flow(msg: str) -> str:
+            nonlocal outer_captured, inner_captured
+            async with phase("Outer"):
+                outer_captured = current_run_config.get()
+                async with phase("Inner"):
+                    inner_captured = current_run_config.get()
+            return "done"
+
+        chat = Runner(flow=flow, default_run_config=rc)
+        await chat("test")
+
+        assert outer_captured is rc
+        assert inner_captured is rc
+        assert current_run_config.get() is None
+
+
 class TestMessageFormat:
     """P0-2: PhaseSession message format must be SDK-compatible."""
 
@@ -161,18 +245,19 @@ class TestMessageFormat:
         agent = Agent(
             name="test_agent",
             instructions="Reply with one word.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async with phase("Test", share_context=True) as ctx:
             await agent("format test")
 
-            user_msg = ctx.items[0]
+            messages = message_items(ctx.items)
+            user_msg = messages[0]
             assert user_msg["role"] == "user"
             # SDK uses content as items (OpenAI Responses API format)
             assert user_msg.get("content") is not None
 
-            assistant_msg = ctx.items[1]
+            assistant_msg = messages[1]
             assert assistant_msg["role"] == "assistant"
             assert assistant_msg.get("content") is not None
 
@@ -191,7 +276,7 @@ class TestStructuredOutputPreservation:
         agent = Agent(
             name="test_agent",
             instructions="Reply with a single word in the 'word' field.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=SimpleOutput,
         )
 
@@ -200,7 +285,7 @@ class TestStructuredOutputPreservation:
 
             assert isinstance(result, SimpleOutput)
             # Note: structured output is now in the items, not data["last_output"]
-            assert len(ctx.items) == 2
+            assert len(message_items(ctx.items)) == 2
 
 
 class TestPhaseSessionInheritance:
@@ -351,7 +436,7 @@ class TestShareContextFalse:
         agent = Agent(
             name="test_agent",
             instructions="Reply briefly.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         token = current_session.set(session)
@@ -383,7 +468,7 @@ class TestShareContextFalse:
         agent = Agent(
             name="test_agent",
             instructions="Reply briefly.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         token = current_session.set(session)

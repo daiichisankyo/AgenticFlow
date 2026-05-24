@@ -5,7 +5,7 @@ from pydantic import BaseModel
 my_agent = Agent(
     name="My agent",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(store=True, reasoning=Reasoning(effort="low", summary="auto")),
 )
 

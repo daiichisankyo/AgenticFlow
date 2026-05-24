@@ -17,6 +17,11 @@ from agentic_flow import Agent, Runner, phase
 from agentic_flow.types import AgentResult
 from tests.conftest import Analysis, Decision
 
+# Module-level marker: every test in this file issues real LLM calls.
+# Default `uv run pytest` skips this; opt in with `-m integration` or
+# `AF_RUN_INTEGRATION=1`.
+pytestmark = pytest.mark.integration
+
 
 class TestExecutionSpecT:
     """3.1 ExecutionSpec[T] - Declaration and execution separation."""
@@ -27,7 +32,7 @@ class TestExecutionSpecT:
         agent = Agent(
             name="str_agent",
             instructions="Reply with exactly 'HELLO' and nothing else.",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         result = await agent("Say hello")
@@ -41,7 +46,7 @@ class TestExecutionSpecT:
         analyzer = Agent(
             name="analyzer",
             instructions="Analyze sentiment. Return positive/negative and score 0-1.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Analysis,
         )
 
@@ -60,7 +65,7 @@ class TestExecutionSpecT:
         agent = Agent(
             name="lazy",
             instructions="Reply OK",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         spec = agent("test")
@@ -82,7 +87,7 @@ class TestExecutionTriggers:
         agent = Agent(
             name="await_test",
             instructions="Reply with 'AWAIT OK'",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         result = await agent("test")
@@ -96,7 +101,7 @@ class TestExecutionTriggers:
         agent = Agent(
             name="await_pydantic",
             instructions="Analyze sentiment as positive/negative with score 0-1.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Analysis,
         )
 
@@ -110,7 +115,7 @@ class TestExecutionTriggers:
         agent = Agent(
             name="stream_str",
             instructions="Reply with 'STREAM OK'",
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         async def flow(msg: str) -> str:
@@ -132,7 +137,7 @@ class TestExecutionTriggers:
         analyzer = Agent(
             name="stream_pydantic",
             instructions="Analyze sentiment as positive/negative with score 0-1.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Analysis,
         )
 
@@ -156,7 +161,7 @@ class TestBeautifulForms:
     @pytest.mark.asyncio
     async def test_normal_form(self):
         """out = await agent('prompt')"""
-        agent = Agent(name="normal", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="normal", instructions="Reply OK", model="gpt-5.5")
 
         out = await agent("test")
 
@@ -165,7 +170,7 @@ class TestBeautifulForms:
     @pytest.mark.asyncio
     async def test_isolated_form(self):
         """out = await agent('prompt').isolated()"""
-        agent = Agent(name="isolated", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="isolated", instructions="Reply OK", model="gpt-5.5")
 
         out = await agent("test").isolated()
 
@@ -174,7 +179,7 @@ class TestBeautifulForms:
     @pytest.mark.asyncio
     async def test_streaming_form(self, handler_log):
         """out = await agent('prompt').stream()"""
-        agent = Agent(name="streaming", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="streaming", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -188,7 +193,7 @@ class TestBeautifulForms:
     @pytest.mark.asyncio
     async def test_isolated_streaming_form(self, handler_log):
         """out = await agent('prompt').isolated().stream()"""
-        agent = Agent(name="iso_stream", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="iso_stream", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -205,7 +210,7 @@ class TestBeautifulForms:
         agent = Agent(
             name="pydantic_forms",
             instructions="Decide action as 'proceed' or 'stop' with reason.",
-            model="gpt-5.2",
+            model="gpt-5.5",
             output_type=Decision,
         )
 

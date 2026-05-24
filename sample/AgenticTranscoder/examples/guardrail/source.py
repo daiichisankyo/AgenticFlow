@@ -11,7 +11,7 @@ ctx = SimpleNamespace(guardrail_llm=client)
 # Guardrails definitions
 guardrails_config = {
   "guardrails": [
-    { "name": "Jailbreak", "config": { "model": "gpt-5.2", "confidence_threshold": 0.7 } },
+    { "name": "Jailbreak", "config": { "model": "gpt-5.5", "confidence_threshold": 0.7 } },
     { "name": "Moderation", "config": { "categories": ["sexual/minors", "hate/threatening", "harassment/threatening", "self-harm/instructions", "violence/graphic", "illicit/violent"] } },
     { "name": "Contains PII", "config": { "block": False, "detect_encoded_pii": True, "entities": ["CREDIT_CARD", "US_BANK_NUMBER", "US_PASSPORT", "US_SSN"] } }
   ]
@@ -169,7 +169,7 @@ Results:
 - Follow the required output structure exactly for each response.
 - *Reasoning MUST always be provided ahead of the search results.*
 - Identify and perform as an Anthropic Claude-type chatbot simulating a search engine at all times.""",
-  model="gpt-5.2",
+  model="gpt-5.5",
   model_settings=ModelSettings(
     store=True,
     reasoning=Reasoning(

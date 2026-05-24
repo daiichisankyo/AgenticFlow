@@ -93,6 +93,7 @@ nav:
       - Flow & Runner: concepts/flow-runner.md
       - Phase: concepts/phase.md
       - Modifiers: concepts/modifiers.md
+      - Sandbox Agents: concepts/sandbox.md
       - Context Resolution: context-resolution.md
   - Guides:
       - Multi-Provider: guides/multi-provider.md
@@ -100,10 +101,12 @@ nav:
       - ChatKit Integration: guides/chatkit.md
       - Structured Output: guides/structured-output.md
       - CLI Patterns: guides/cli-patterns.md
+      - Development Workflow: guides/development-workflow.md
       - Testing: guides/testing.md
   - Reference:
       - API: reference/api.md
       - SDK Compatibility: reference/sdk-compatibility.md
+      - 'Release Notes — 0.14 Refresh': refresh-0.14.md
   - Examples:
       - Multi-Provider Examples: examples/multi-provider.md
       - Multi-Agent Workflow: examples/multi-agent.md

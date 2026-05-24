@@ -46,7 +46,7 @@ async with af.phase("Greeting"):
 
 ```python
 # T = str (default)
-assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.5")
 spec: af.ExecutionSpec[str] = assistant("Hello")
 result: str = await spec
 
@@ -55,7 +55,7 @@ class Analysis(BaseModel):
     sentiment: str
     score: float
 
-analyzer = af.Agent(name="analyzer", instructions="...", output_type=Analysis, model="gpt-5.2")
+analyzer = af.Agent(name="analyzer", instructions="...", output_type=Analysis, model="gpt-5.5")
 spec: af.ExecutionSpec[Analysis] = analyzer("Analyze this text")
 result: Analysis = await spec
 result.sentiment  # IDE completion works
@@ -166,7 +166,7 @@ result = await agent("prompt").run_config(
 
 # Override model for this execution
 result = await agent("prompt").run_config(
-    RunConfig(model="gpt-5.2")
+    RunConfig(model="gpt-5.5")
 )
 
 # Set workflow name for tracing
@@ -174,6 +174,8 @@ result = await agent("prompt").run_config(
     RunConfig(workflow_name="my_workflow")
 )
 ```
+
+**Resolution with Runner default.** When `af.Runner(default_run_config=...)` is set, it is injected via the `current_run_config` contextvar. `ExecutionSpec.build_run_kwargs()` resolves `run_config` in priority order: `.run_config()` modifier on the spec → Runner-injected contextvar → SDK default (no `run_config` kwarg passed). The modifier always wins when present, so `.run_config()` is the right tool for per-call overrides on top of an app-wide Runner default. See [Flow & Runner](flow-runner.md) for the injection mechanism.
 
 ### .context()
 

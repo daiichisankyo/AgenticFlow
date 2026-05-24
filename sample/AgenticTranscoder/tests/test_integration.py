@@ -161,7 +161,7 @@ class TestCoderAgentStructure:
 
         assert "Agentic Flow" in CODER_INSTRUCTIONS
         assert "agent_specs.py" in CODER_INSTRUCTIONS
-        assert "gpt-5.2" in CODER_INSTRUCTIONS
+        assert "gpt-5.5" in CODER_INSTRUCTIONS
 
 
 @pytest.mark.skipif(not HAS_API_KEY, reason="OPENAI_API_KEY not set")

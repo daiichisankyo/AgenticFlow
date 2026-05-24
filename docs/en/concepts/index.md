@@ -132,7 +132,7 @@ The same workflow in AF:
 ```python
 import agentic_flow as af
 
-assistant = af.Agent(name="assistant", instructions="Help the user.", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="Help the user.", model="gpt-5.5")
 
 # Declaration — creates a specification
 spec = assistant("What is Python?")
@@ -192,9 +192,10 @@ graph LR
 | Axis | Controls | Specified At |
 |:-----|:---------|:-------------|
 | **WHAT** | Agent capabilities | `af.Agent(...)`, `agent(prompt)` |
-| **WHERE** | Data flow boundaries | `phase()`, `.isolated()`, `.snapshot()`, `af.Runner(session=...)` |
+| **WHERE** (data) | Data flow boundaries (history, persist, PhaseSession) | `phase()`, `.isolated()`, `.snapshot()`, `af.Runner(session=...)` |
+| **WHERE** (environment) | Execution environment (sandbox transport, tracing, model overrides) | `af.Runner(default_run_config=...)`, `.run_config()` per-call override |
 | **HOW** | Display and observation | `.stream()`, `.silent()`, `af.Runner(handler=...)` |
-| **LIMITS** | Execution constraints | `.max_turns()`, `.run_config()` |
+| **LIMITS** | Execution constraints | `.max_turns()` |
 | **WHEN** | Lifecycle observation | `af.Agent(hooks=...)`, events |
 
 ### WHAT — Agent Capabilities
@@ -208,9 +209,11 @@ Defines what the agent can do:
 - `model`, `model_settings` — Model configuration
 - `handoffs` — Delegation targets
 
-### WHERE — Data Flow Boundaries
+### WHERE — Two distinct kinds of boundary
 
-Controls where data flows:
+WHERE has two orthogonal sub-axes that AgenticFlow keeps separate:
+
+**Data flow boundaries** — where conversation history and PhaseSession data live:
 
 - `Session` — Global conversation history
 - `PhaseSession` — Local thinking space
@@ -218,10 +221,23 @@ Controls where data flows:
 - `.isolated()` — No context (stateless)
 - `Context` — Dependency injection (SDK pass-through via `.context()`)
 
+**Execution environment** — where (which container, which tracing pipeline, which model provider) the agent actually runs:
+
+- `RunConfig` — sandbox transport, tracing, model overrides, guardrails
+- Injected app-wide via `af.Runner(default_run_config=...)` (the recommended path)
+- Overridden per call via the existing `.run_config()` modifier when needed
+
+The two are deliberately handled by different mechanisms because they answer different questions: *what data is the agent looking at* vs *which machine is the agent running on*. Conflating them (for example by binding a `RunConfig` to a `phase()`) would over-couple semantic units to physical execution and break the single-responsibility of `phase`.
+
 **These are NOT hidden.** You can explicitly access them:
 
 ```python
-from agentic_flow.agent import current_session, current_handler, current_phase_session
+from agentic_flow.agent import (
+    current_handler,
+    current_phase_session,
+    current_run_config,
+    current_session,
+)
 
 async def my_flow(user_message: str):
     # Access current Session
@@ -232,6 +248,9 @@ async def my_flow(user_message: str):
 
     # Access current Handler
     handler = current_handler.get()
+
+    # Access current RunConfig (Runner-injected default)
+    run_config = current_run_config.get()
 
     # Access current PhaseSession (if inside phase)
     phase_ctx = current_phase_session.get()
@@ -358,6 +377,9 @@ async with af.phase("Research"):
 | Modifiers are flags | `.stream()`, `.silent()`, `.isolated()`, `.snapshot()`, `.max_turns()` don't execute |
 | Boundaries are visible | `async with af.phase()` marks start/end |
 | Axes are separate | WHAT / WHERE / HOW / LIMITS / WHEN don't mix |
+
+!!! note "Applies to `af.SandboxAgent` too"
+    Sandbox-aware agents (`af.SandboxAgent`, introduced with the SDK 0.14 refresh) follow the same Call-Spec discipline. Calling one returns an `ExecutionSpec` and only `await` triggers execution; every modifier composes identically. See [Sandbox Agents](sandbox.md).
 
 ---
 

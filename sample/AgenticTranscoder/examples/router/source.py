@@ -61,7 +61,7 @@ Example 3:
 Input:
 その他の質問が来た時
 Category: others""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     output_type=ClassifySchema,
     model_settings=ModelSettings(temperature=0),
 )
@@ -78,7 +78,7 @@ cook = Agent(
 Output format:
 - Respond in natural, well-structured Japanese sentences.
 - Include reasoning before final advice or recipes.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(
         store=True,
         reasoning=Reasoning(effort="low", summary="auto"),
@@ -97,7 +97,7 @@ meteorologist = Agent(
 Output format:
 - First: reasoning/analysis paragraph
 - Then: forecast/conclusion paragraph""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(
         store=True,
         reasoning=Reasoning(effort="low", summary="auto"),

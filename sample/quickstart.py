@@ -31,7 +31,7 @@ console = Console()
 assistant = Agent(
     name="assistant",
     instructions="You are a helpful assistant. Reply concisely in 1-2 sentences.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 
@@ -43,7 +43,7 @@ class Review(BaseModel):
 reviewer = Agent(
     name="reviewer",
     instructions="Review the explanation. Return approved=true if good, else feedback.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     output_type=Review,
 )
 
@@ -57,7 +57,7 @@ class Analysis(BaseModel):
 analyzer = Agent(
     name="analyzer",
     instructions="Analyze the sentiment of the given text.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     output_type=Analysis,
 )
 

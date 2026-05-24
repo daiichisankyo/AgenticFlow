@@ -22,7 +22,7 @@ chat_agent = Agent(
 - Answer questions clearly and concisely.
 - Be friendly and professional.
 - If you don't know something, say so honestly.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(
         store=True,
         reasoning=Reasoning(effort="low", summary="auto"),

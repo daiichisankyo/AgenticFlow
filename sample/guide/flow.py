@@ -22,7 +22,7 @@ SRC_DIR = PROJECT_ROOT / "src" / "agentic_flow"
 DOCS_DIR = PROJECT_ROOT / "docs" / "en"
 README = PROJECT_ROOT / "README.md"
 
-MODEL = os.getenv("MODEL_NAME", "gpt-5.2")
+MODEL = os.getenv("MODEL_NAME", "gpt-5.5")
 
 
 def load_docs() -> str:

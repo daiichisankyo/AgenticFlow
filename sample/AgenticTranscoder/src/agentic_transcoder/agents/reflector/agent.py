@@ -3,7 +3,7 @@
 Intent: Quality review agent (read-only + todo management) with reasoning("high").
 
 Configuration:
-    - model: gpt-5.2
+    - model: gpt-5.5
     - model_settings: reasoning("high")
     - tools: load_skill, read_file, list_files, get_todos, add_todo, verify_todo
     - output_type: ReflectionResult
@@ -24,7 +24,7 @@ from .instructions import REFLECTOR_INSTRUCTIONS
 reflector = Agent(
     name="reflector",
     instructions=REFLECTOR_INSTRUCTIONS,
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("medium", truncation="auto"),
     tools=[load_skill, read_file, list_files, get_todos, add_todo, verify_todo],
     output_type=ReflectionResult,

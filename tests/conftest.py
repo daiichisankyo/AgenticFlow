@@ -43,6 +43,11 @@ def handler_log():
     return handler
 
 
+def message_items(items):
+    """Return only user/assistant message items, dropping reasoning items."""
+    return [item for item in items if item.get("role") in ("user", "assistant")]
+
+
 class Analysis(BaseModel):
     """Sentiment analysis result."""
 

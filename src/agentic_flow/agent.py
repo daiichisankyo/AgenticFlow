@@ -27,7 +27,7 @@ from agents import Agent as SDKAgent
 from agents import Runner
 
 if TYPE_CHECKING:
-    from agents import Session
+    from agents import RunConfig, Session
 
     from .phase import PhaseSession
     from .types import Handler
@@ -37,6 +37,7 @@ T = TypeVar("T")
 
 current_handler: ContextVar[Handler | None] = ContextVar("current_handler", default=None)
 current_session: ContextVar[Session | None] = ContextVar("current_session", default=None)
+current_run_config: ContextVar[RunConfig | None] = ContextVar("current_run_config", default=None)
 current_phase_session: ContextVar[PhaseSession | None] = ContextVar(
     "current_phase_session", default=None
 )
@@ -215,7 +216,8 @@ class ExecutionSpec(Generic[T]):
 
         chatkit_ctx = current_chatkit_context.get()
         if chatkit_ctx is not None:
-            return await chatkit_ctx.execute_spec(self)
+            # Pass resolved (input_data, session) so ChatKit honors is_snapshot.
+            return await chatkit_ctx.execute_spec(self, input_data, session)
 
         stream = Runner.run_streamed(self.sdk_agent, input_data, **self.build_run_kwargs(session))
 
@@ -286,10 +288,20 @@ class ExecutionSpec(Generic[T]):
         return current_handler.get()
 
     def build_run_kwargs(self, session: Any) -> dict:
-        """Build kwargs dict for SDK Runner.run() / run_streamed()."""
+        """Build kwargs dict for SDK Runner.run() / run_streamed().
+
+        Resolution order for run_config (most-specific wins):
+            1. .run_config(...) modifier on this spec
+            2. Runner(default_run_config=...) injected via contextvar
+            3. SDK default (no run_config kwarg passed)
+        """
         run_kwargs: dict = {"session": session, **self.run_kwargs}
         if self.max_turns_limit is not None:
             run_kwargs["max_turns"] = self.max_turns_limit
+        if "run_config" not in run_kwargs:
+            ctx_run_config = current_run_config.get()
+            if ctx_run_config is not None:
+                run_kwargs["run_config"] = ctx_run_config
         return run_kwargs
 
     async def emit_output(self, output: Any) -> None:
@@ -332,7 +344,7 @@ class Agent(Generic[T]):
 
     Example:
         # Basic usage
-        assistant = Agent(name="assistant", instructions="...", model="gpt-5.2")
+        assistant = Agent(name="assistant", instructions="...", model="gpt-5.5")
         result: str = await assistant("Hello")
 
         # With modifiers

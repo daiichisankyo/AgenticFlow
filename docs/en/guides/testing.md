@@ -24,7 +24,7 @@ asyncio_default_fixture_loop_scope = "function"
 import pytest
 import agentic_flow as af
 
-assistant = af.Agent(name="assistant", instructions="Say hello.", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="Say hello.", model="gpt-5.5")
 
 async def greet_flow(message: str) -> str:
     async with af.phase("Greeting"):
@@ -252,6 +252,85 @@ async def test_real_api():
     runner = af.Runner(flow=my_flow)
     result = await runner("What is 2+2?")
     assert "4" in result
+```
+
+## Real-LLM End-to-End Tests (Marker-Gated)
+
+The default `uv run pytest` run never makes network calls or boots external
+processes. Tests that do are gated behind pytest markers and opt-in
+environment variables so CI stays fast and local API keys aren't burned by
+accident. Two markers ship with the project:
+
+| Marker | Purpose | Opt-in |
+|---|---|---|
+| `integration` | Real-LLM E2E for `af.SandboxAgent` (boots a `unix_local` sandbox in a temp directory and runs `gpt-5.5` inside it) | `AF_RUN_INTEGRATION=1` |
+| `e2e` | Real-LLM E2E for multi-provider routing through LiteLLM against a *local* model server (Ollama or llama-cpp-python) | `--group e2e` install + a running local server |
+
+Both are registered in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "e2e: tests requiring real external model/provider access",
+    "integration: real-LLM/sandbox end-to-end tests; opt-in via AF_RUN_INTEGRATION=1",
+]
+```
+
+### Sandbox E2E (`integration`)
+
+Lives in `tests/integration/test_sandbox_e2e.py`. Boots a real `unix_local`
+sandbox in a temp directory and asserts the AF → SDK → sandbox → host
+filesystem round-trip behaves end-to-end. Needs `OPENAI_API_KEY`.
+
+```bash
+AF_RUN_INTEGRATION=1 uv run pytest tests/integration -m integration -v
+```
+
+`-m integration` is required because `pyproject.toml` sets
+`addopts = ["-m", "not e2e and not integration"]` for the offline default.
+The command-line `-m integration` overrides that filter so the marked tests
+are actually selected. Without it, pytest reports `2 deselected / 0 selected`
+even with `AF_RUN_INTEGRATION=1`.
+
+The module-level `pytestmark` then skips each case when either
+`AF_RUN_INTEGRATION` or `OPENAI_API_KEY` is missing, so the default run
+reports them as `skipped` without surprises.
+
+### Local LLM E2E (`e2e`)
+
+Lives inside `tests/test_multi_provider.py::TestMultiProviderE2E`. Runs
+real LLM calls through LiteLLM into a *local* server, so no public API
+quota is consumed:
+
+- **Ollama**: `ollama serve` running locally, with a small model pulled
+  (e.g. `ollama pull qwen2.5:0.5b`). Override the default model id with
+  `AF_OLLAMA_MODEL`.
+- **llama-cpp-python**: a `llama-cpp-python[server]` instance reachable
+  via the SDK-style `/v1/models` endpoint.
+
+Install the optional dependencies and run only the e2e cases:
+
+```bash
+uv sync --group e2e
+uv run pytest tests/test_multi_provider.py -m e2e -v
+```
+
+If neither server is reachable the corresponding fixture calls
+`pytest.skip(...)` so the case reports as `skipped` rather than failing.
+
+### Selecting markers
+
+Run only opt-in cases:
+
+```bash
+uv run pytest -m "e2e or integration"
+```
+
+Skip them explicitly (the default behaviour, but helpful when other
+custom markers are added later):
+
+```bash
+uv run pytest -m "not e2e and not integration"
 ```
 
 ## Test Organization

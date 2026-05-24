@@ -1,11 +1,16 @@
 """Runner - Flow execution container.
 
 Design:
-    Runner holds Session, injects it into Flow execution via contextvars.
-    Flow never references Session directly.
+    Runner holds execution-environment dependencies (Session, Handler,
+    RunConfig) and injects them into Flow execution via contextvars.
+    Flow never references them directly. This keeps business logic clean.
 
     Session read/write is handled by SDK at ExecutionSpec level.
     Runner does NOT write to Session.
+
+    default_run_config is the app-wide RunConfig (e.g. sandbox transport,
+    tracing settings, model overrides). Per-call overrides remain
+    available via the .run_config() modifier on ExecutionSpec.
 
 Sync Execution:
     Runner provides synchronous (blocking) execution for Jupyter/REPL:
@@ -23,11 +28,11 @@ import concurrent.futures
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from .agent import current_handler, current_session
+from .agent import current_handler, current_run_config, current_session
 from .types import Handler
 
 if TYPE_CHECKING:
-    from agents import Session
+    from agents import RunConfig, Session
 
 T = TypeVar("T")
 Flow = Callable[[str], Awaitable[T]]
@@ -118,10 +123,12 @@ class Runner:
         flow: Flow[Any],
         session: Session | None = None,
         handler: Handler | None = None,
+        default_run_config: RunConfig | None = None,
     ):
         self.flow = flow
         self.session = session
         self.handler = handler
+        self.default_run_config = default_run_config
 
     async def __call__(self, user_message: str) -> Any:
         """Execute flow with user message."""
@@ -133,9 +140,15 @@ class Runner:
         if self.handler is not None:
             handler_token = current_handler.set(self.handler)
 
+        run_config_token = None
+        if self.default_run_config is not None:
+            run_config_token = current_run_config.set(self.default_run_config)
+
         try:
             return await self.flow(user_message)
         finally:
+            if run_config_token is not None:
+                current_run_config.reset(run_config_token)
             if handler_token is not None:
                 current_handler.reset(handler_token)
             if session_token is not None:

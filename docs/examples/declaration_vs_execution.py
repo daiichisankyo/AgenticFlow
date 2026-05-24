@@ -2,7 +2,7 @@
 
 import agentic_flow as af
 
-assistant = af.Agent(name="assistant", instructions="Help the user.", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="Help the user.", model="gpt-5.5")
 
 # Declaration - creates a specification, NOT executed
 spec = assistant("Hello")

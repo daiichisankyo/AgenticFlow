@@ -24,7 +24,7 @@ drafter = af.Agent(
     name="drafter",
     instructions="""Create an initial draft response to the user's request.
     Be thorough but expect feedback for improvement.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 reviewer = af.Agent(
@@ -33,7 +33,7 @@ reviewer = af.Agent(
     If acceptable, respond with: APPROVED
     If needs improvement, respond with: REJECTED
     Followed by specific feedback on what to improve.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),
 )
 
@@ -41,7 +41,7 @@ refiner = af.Agent(
     name="refiner",
     instructions="""Improve the draft based on the reviewer's feedback.
     Address each point of feedback specifically.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 
@@ -131,7 +131,7 @@ reviewer = af.Agent(
     name="reviewer",
     instructions="Review the draft. Provide structured feedback.",
     output_type=Review,
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 async def typed_review_flow(user_message: str) -> str:

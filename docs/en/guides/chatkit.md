@@ -104,14 +104,33 @@ ChatKit uses "workflows" to group reasoning display. AF manages these automatica
 
 This ensures each phase gets its own display boundary.
 
-## Handler vs ChatKit
+## Handler with ChatKit
 
-When using `run_with_chatkit_context()`:
+`run_with_chatkit_context()` delegates flow execution to `Runner.__call__`, so
+the full Runner injection contract — `session`, `handler`, and
+`default_run_config` — reaches every agent call. ChatKit only adds
+`current_chatkit_context` on top.
 
-- **Handler is NOT used** — Events go to ChatKit's queue instead
-- **Phase events still emit** — But to ChatKit, not handler
+- **`AgentResult` events** go to ChatKit's queue for full-text UI display.
+  The handler does **not** receive `AgentResult` in ChatKit mode — display is
+  mutually exclusive: `ChatKit > Handler > print`.
+- **Phase events** (`PhaseStarted` / `PhaseEnded`) are emitted to **both**
+  the handler **and** ChatKit. Use the handler for logging, telemetry, or
+  CLI mirroring while ChatKit renders the workflow boundary.
+- **`default_run_config`** (e.g. `RunConfig(sandbox=SandboxRunConfig(...))`,
+  tracing, model overrides) reaches the SDK exactly as in non-ChatKit mode.
 
-For CLI output with ChatKit backend, you'd need a separate handler setup.
+```python
+runner = af.Runner(
+    flow=my_flow,
+    session=SQLiteSession(...),
+    handler=my_telemetry_handler,           # phase events also reach here
+    default_run_config=RunConfig(sandbox=SandboxRunConfig(...)),
+)
+
+async for event in run_with_chatkit_context(runner, thread, store, ctx, msg):
+    yield event
+```
 
 ## Silent Mode in ChatKit
 
@@ -165,14 +184,14 @@ from chatkit.server import StreamingResult
 researcher = af.Agent(
     name="researcher",
     instructions="Research topics thoroughly.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),
 )
 
 responder = af.Agent(
     name="responder",
     instructions="Provide clear, helpful responses.",
-    model="gpt-5.2",
+    model="gpt-5.5",
 )
 
 

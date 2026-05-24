@@ -19,7 +19,7 @@ from agentic_flow import Agent
 
 from .types import MemoryDecision
 
-MODEL = os.getenv("MODEL_NAME", "gpt-5.2")
+MODEL = os.getenv("MODEL_NAME", "gpt-5.5")
 
 memory_agent = Agent(
     name="memory_extractor",

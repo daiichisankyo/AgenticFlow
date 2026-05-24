@@ -190,55 +190,57 @@ async def phase(
     # Mark that we're inside a phase (for share_context=False handling)
     in_phase_token = current_in_phase.set(True)
 
-    # Emit PhaseStarted to handler
-    from .utils import call_handler
-
-    phase_started_event = PhaseStarted(label=label)
     handler = current_handler.get()
-    if handler is not None:
-        await call_handler(handler, phase_started_event)
-
-    # ChatKit integration: emit phase label to create workflow boundary
     chatkit_ctx = current_chatkit_context.get()
-    if chatkit_ctx is not None:
-        await chatkit_ctx.emit_phase_label(label)
 
+    # Two-tier try/finally: the outer finally guarantees contextvar reset
+    # even if PhaseStarted emit, ChatKit emit_phase_label, persist, close_workflow,
+    # or PhaseEnded emit raises. Cleanup wins over display failures.
     try:
-        yield phase_session
-    finally:
-        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        from .utils import call_handler
 
-        # persist=True: write last assistant response to Session
-        # Phase is "internal thinking space" - only the final result is persisted.
-        # User message management is the programmer's responsibility.
-        # Note: reasoning models return [reasoning, message] pairs that must stay together.
-        if persist and phase_session is not None and phase_session.items:
-            session = current_session.get()
-            if session is not None:
-                items = phase_session.items
-                for i in range(len(items) - 1, -1, -1):
-                    item = items[i]
-                    if item.get("role") == "assistant" and item.get("content"):
-                        # Check if preceding item is a reasoning item (required by API)
-                        to_persist = []
-                        if i > 0 and items[i - 1].get("type") == "reasoning":
-                            to_persist.append(items[i - 1])
-                        to_persist.append(item)
-                        try:
-                            await session.add_items(to_persist)
-                        except Exception as e:
-                            logger.warning("Failed to persist phase result to session: %s", e)
-                        break
-
-        # ChatKit integration: close workflow to allow next phase to create new one
-        if chatkit_ctx is not None:
-            await chatkit_ctx.close_workflow()
-
-        # Emit PhaseEnded to handler
-        phase_ended_event = PhaseEnded(label=label, elapsed_ms=elapsed_ms)
         if handler is not None:
-            await call_handler(handler, phase_ended_event)
+            await call_handler(handler, PhaseStarted(label=label))
 
+        if chatkit_ctx is not None:
+            await chatkit_ctx.emit_phase_label(label)
+
+        try:
+            yield phase_session
+        finally:
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+            # persist=True: write last assistant response to Session
+            # Phase is "internal thinking space" - only the final result is persisted.
+            # User message management is the programmer's responsibility.
+            # Note: reasoning models return [reasoning, message] pairs that must stay
+            # together.
+            if persist and phase_session is not None and phase_session.items:
+                session = current_session.get()
+                if session is not None:
+                    items = phase_session.items
+                    for i in range(len(items) - 1, -1, -1):
+                        item = items[i]
+                        if item.get("role") == "assistant" and item.get("content"):
+                            # Check if preceding item is a reasoning item (API requirement)
+                            to_persist = []
+                            if i > 0 and items[i - 1].get("type") == "reasoning":
+                                to_persist.append(items[i - 1])
+                            to_persist.append(item)
+                            try:
+                                await session.add_items(to_persist)
+                            except Exception as e:
+                                logger.warning("Failed to persist phase result to session: %s", e)
+                            break
+
+            # ChatKit integration: close workflow to allow next phase to create new one
+            if chatkit_ctx is not None:
+                await chatkit_ctx.close_workflow()
+
+            # Emit PhaseEnded to handler
+            if handler is not None:
+                await call_handler(handler, PhaseEnded(label=label, elapsed_ms=elapsed_ms))
+    finally:
         # Reset in_phase flag
         current_in_phase.reset(in_phase_token)
 

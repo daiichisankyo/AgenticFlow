@@ -36,7 +36,7 @@ Use category names verbatim:
 - Cooking questions → cook
 - Weather questions → meteorologist
 - Everything else → others""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     output_type=ClassifyResult,
     model_settings=ModelSettings(temperature=0),
 )
@@ -52,7 +52,7 @@ cook = Agent(
 Output format:
 - Respond in natural, well-structured Japanese sentences.
 - Include reasoning before final advice or recipes.""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("low"),
 )
 
@@ -67,6 +67,6 @@ meteorologist = Agent(
 Output format:
 - First: reasoning/analysis paragraph
 - Then: forecast/conclusion paragraph""",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("low"),
 )

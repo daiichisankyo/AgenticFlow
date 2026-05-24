@@ -19,10 +19,10 @@ Workflow Boundary Design:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator
 from contextvars import ContextVar
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chatkit.agents import AgentContext
@@ -119,7 +119,7 @@ class ChatKitExecutionContext:
             # Worst case: UI display issues, not data loss
             pass
 
-    async def execute_spec(self, spec: ExecutionSpec) -> Any:
+    async def execute_spec(self, spec: ExecutionSpec, input_data: Any, session: Any) -> Any:
         """Execute ExecutionSpec and emit full-text result to ChatKit.
 
         .stream() controls internal execution mode, not display.
@@ -132,12 +132,16 @@ class ChatKitExecutionContext:
         - Outside phase: SDK handles Session read/write (str input)
         - Inside phase: PhaseSession only, no Session (list input)
         - phase(persist=True): last pair written to Session at phase end
+        - .snapshot(): read-only history list with session=None (no writes)
+
+        ``input_data`` and ``session`` are resolved by ``ExecutionSpec.execute``
+        (which honors ``is_snapshot``) and passed in here. Re-resolving via
+        ``spec.resolve_input()`` would ignore snapshot semantics and pass
+        ``PhaseSession`` as a writable session, breaking concurrency safety.
 
         When is_silent=True, result is not emitted to ChatKit (no UI display).
         """
         from agents import Runner
-
-        input_data, session = spec.resolve_input()
 
         run_kwargs = spec.build_run_kwargs(session)
 
@@ -191,19 +195,16 @@ async def run_with_chatkit_context(
     """
     from chatkit.agents import AgentContext
 
-    from .agent import current_session
-
     agent_context = AgentContext(thread=thread, store=store, request_context=context)
     ctx = ChatKitExecutionContext(agent_context, store)
 
     token = current_chatkit_context.set(ctx)
-    session_token = None
-    if runner.session is not None:
-        session_token = current_session.set(runner.session)
 
-    flow_task: asyncio.Task[Any] = asyncio.create_task(
-        cast(Coroutine[Any, Any, Any], runner.flow(user_message))
-    )
+    # Delegate Flow execution to Runner.__call__ so it injects the full
+    # contract: session, handler, and default_run_config. ChatKit only
+    # adds current_chatkit_context on top — it must not bypass Runner's
+    # injection role.
+    flow_task: asyncio.Task[Any] = asyncio.create_task(runner(user_message))
 
     async def get_next_event():
         return await ctx.event_queue.get()
@@ -270,5 +271,3 @@ async def run_with_chatkit_context(
 
     finally:
         current_chatkit_context.reset(token)
-        if session_token is not None:
-            current_session.reset(session_token)

@@ -2,6 +2,8 @@
 
 **Call-Spec Discipline for LLM Agent Workflows**
 
+> **🚀 v0.38 — SDK 0.14 Refresh.** New [`af.SandboxAgent`](concepts/sandbox.md) for persistent containerized workspaces, drop-in support for the SDK's new session backends, and `openai-agents>=0.14.0,<0.15` baseline. Existing flows are unchanged. → [Refresh report](refresh-0.14.md)
+
 ---
 
 ## See the Difference
@@ -50,7 +52,7 @@ The agentic flow pattern eliminates it.
 | Lines of code | ~126 | ~43 |
 | Phase management | Manual | Automatic |
 | Error handling | try/finally | Automatic |
-| Adding streaming | Rewrite | `.stream()` |
+| Streaming execution | Rewrite | `.stream()` |
 
 </div>
 
@@ -63,7 +65,7 @@ The secret is simple: **separate declaration from execution**.
 ```python
 import agentic_flow as af
 
-assistant = af.Agent(name="assistant", instructions="Help the user.", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="Help the user.", model="gpt-5.5")
 
 # Declaration — creates a specification, NOT executed
 spec = assistant("Hello")
@@ -75,7 +77,7 @@ result = await spec
 | Expression | What it does | Executes? |
 |:-----------|:-------------|:---------:|
 | `agent(prompt)` | Creates `ExecutionSpec[T]` | :material-close: No |
-| `.stream()` / `.silent()` / `.isolated()` | Adds modifiers | :material-close: No |
+| `.stream()` / `.silent()` / `.isolated()` / `.snapshot()` | Adds modifiers | :material-close: No |
 | `await spec` | Runs the agent | :material-check: **Yes** |
 
 This makes your code:
@@ -94,8 +96,8 @@ This makes your code:
 import agentic_flow as af
 from agents import SQLiteSession
 
-researcher = af.Agent(name="researcher", instructions="Research topics.", model="gpt-5.2")
-responder = af.Agent(name="responder", instructions="Respond to user.", model="gpt-5.2")
+researcher = af.Agent(name="researcher", instructions="Research topics.", model="gpt-5.5")
+responder = af.Agent(name="responder", instructions="Respond to user.", model="gpt-5.5")
 
 async def my_flow(user_message: str) -> str:
     # Internal thinking - not saved to session
@@ -116,10 +118,10 @@ result = await runner("What is Python?")
 
 ```bash
 # With uv (recommended)
-uv add ds-agentic-flow
+uv add git+https://github.com/daiichisankyo/AgenticFlow.git
 
 # With pip
-pip install ds-agentic-flow
+pip install git+https://github.com/daiichisankyo/AgenticFlow.git
 ```
 
 ---
@@ -168,4 +170,3 @@ pip install ds-agentic-flow
 
 - [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
 - [ChatKit](https://platform.openai.com/docs/guides/chatkit)
-

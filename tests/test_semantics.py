@@ -33,6 +33,8 @@ from agentic_flow.agent import (
 )
 from agentic_flow.phase import PhaseSession, current_in_phase, current_phase_session_history
 
+from .conftest import message_items
+
 
 class TestResolveInputPriority:
     """Test resolve_input() priority order.
@@ -46,7 +48,7 @@ class TestResolveInputPriority:
 
     def test_priority_isolated_ignores_phase_session(self):
         """isolated() ignores PhaseSession even when set."""
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
         ctx = PhaseSession("test", inherited_history=[{"role": "user", "content": "history"}])
 
         token = current_phase_session.set(ctx)
@@ -61,7 +63,7 @@ class TestResolveInputPriority:
 
     def test_priority_isolated_ignores_session(self):
         """isolated() ignores Session even when set."""
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
         session = SQLiteSession(session_id="test", db_path=":memory:")
 
         token = current_session.set(session)
@@ -76,7 +78,7 @@ class TestResolveInputPriority:
 
     def test_priority_phase_over_session(self):
         """PhaseSession takes priority over Session."""
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
 
         session = SQLiteSession(session_id="test", db_path=":memory:")
         phase_session = PhaseSession(
@@ -104,7 +106,7 @@ class TestResolveInputPriority:
 
     def test_priority_default_uses_session(self):
         """Default (no phase) uses Session."""
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
 
         session = SQLiteSession(session_id="test", db_path=":memory:")
         token = current_session.set(session)
@@ -120,7 +122,7 @@ class TestResolveInputPriority:
 
     def test_priority_share_context_false_reads_session(self):
         """share_context=False reads Session but doesn't write."""
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
 
         session = SQLiteSession(session_id="test", db_path=":memory:")
         cached_history = [{"role": "user", "content": [{"type": "input_text", "text": "cached"}]}]
@@ -148,7 +150,7 @@ class TestResolveInputPriority:
     @pytest.mark.asyncio
     async def test_snapshot_reads_phase_context(self):
         """snapshot() reads PhaseSession history, returns (list, None)."""
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
         ctx = PhaseSession(
             "test",
             inherited_history=[
@@ -178,7 +180,7 @@ class TestResolveInputPriority:
 
         In execute(): `if self.is_snapshot and not self.is_isolated` — isolated wins.
         """
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
         ctx = PhaseSession(
             "test",
             inherited_history=[
@@ -198,6 +200,7 @@ class TestResolveInputPriority:
             current_phase_session.reset(token)
 
 
+@pytest.mark.integration
 class TestPhaseSessionWriteBehavior:
     """Test that phase controls Session write behavior correctly.
 
@@ -215,7 +218,7 @@ class TestPhaseSessionWriteBehavior:
         initial_items = await session.get_items()
         assert len(initial_items) == 0
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test", share_context=True):
@@ -237,7 +240,7 @@ class TestPhaseSessionWriteBehavior:
         initial_items = await session.get_items()
         assert len(initial_items) == 0
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test", share_context=True, persist=True):
@@ -249,15 +252,18 @@ class TestPhaseSessionWriteBehavior:
 
         # Session should have last assistant response
         final_items = await session.get_items()
-        assert len(final_items) == 1, "phase(persist=True) should write last assistant to Session"
-        assert final_items[0]["role"] == "assistant"
+        final_messages = message_items(final_items)
+        assert len(final_messages) == 1, (
+            "phase(persist=True) should write last assistant to Session"
+        )
+        assert final_messages[0]["role"] == "assistant"
 
     @pytest.mark.asyncio
     async def test_phase_session_updated_but_not_session(self):
         """PhaseSession should be updated, but Session should not."""
         session = SQLiteSession(session_id="test_ctx_update", db_path=":memory:")
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
         captured_ctx = None
 
         async def flow(msg: str) -> str:
@@ -272,13 +278,14 @@ class TestPhaseSessionWriteBehavior:
 
         # PhaseSession should have items entries
         assert captured_ctx is not None
-        assert len(captured_ctx.items) == 2  # user + assistant
+        assert len(message_items(captured_ctx.items)) == 2  # user + assistant
 
         # Session should be empty
         session_items = await session.get_items()
         assert len(session_items) == 0
 
 
+@pytest.mark.integration
 class TestSilentEventSuppression:
     """Test that silent() suppresses handler events correctly.
 
@@ -294,7 +301,7 @@ class TestSilentEventSuppression:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -320,7 +327,7 @@ class TestSilentEventSuppression:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -339,7 +346,7 @@ class TestSilentEventSuppression:
     @pytest.mark.asyncio
     async def test_silent_still_updates_phase_session(self):
         """silent() should still update PhaseSession."""
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
         captured_ctx = None
 
         async def flow(msg: str) -> str:
@@ -354,7 +361,9 @@ class TestSilentEventSuppression:
 
         # PhaseSession should have entries even with silent()
         assert captured_ctx is not None
-        assert len(captured_ctx.items) == 2, "silent() should still update PhaseSession"
+        assert len(message_items(captured_ctx.items)) == 2, (
+            "silent() should still update PhaseSession"
+        )
 
     @pytest.mark.asyncio
     async def test_non_silent_does_call_handler(self):
@@ -366,7 +375,7 @@ class TestSilentEventSuppression:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -381,6 +390,7 @@ class TestSilentEventSuppression:
         assert agent_results[0].content is not None
 
 
+@pytest.mark.integration
 class TestShareContextFalseReadOnly:
     """Test that share_context=False is read-only.
 
@@ -407,7 +417,7 @@ class TestShareContextFalseReadOnly:
             ]
         )
 
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
 
         token = current_session.set(session)
         try:
@@ -432,7 +442,7 @@ class TestShareContextFalseReadOnly:
         initial_items = await session.get_items()
         assert len(initial_items) == 0
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test", share_context=False):
@@ -521,7 +531,7 @@ class TestChatKitBoundary:
 
         ctx.execute_spec = mock_execute_spec
 
-        agent = Agent(name="test", instructions="test", model="gpt-5.2")
+        agent = Agent(name="test", instructions="test", model="gpt-5.5")
         spec = agent("test").silent()
 
         token = current_chatkit_context.set(ctx)
@@ -564,6 +574,7 @@ class TestEventTypeSystem:
         assert Handler is not None
 
 
+@pytest.mark.integration
 class TestContextVarIsolation:
     """Test that contextvars are properly isolated.
 
@@ -638,6 +649,7 @@ class TestContextVarIsolation:
         assert current_in_phase.get() is False
 
 
+@pytest.mark.integration
 class TestPhaseEventsToHandler:
     """Test that phase events are forwarded to Handler.
 
@@ -715,6 +727,7 @@ class TestPhaseEventsToHandler:
         assert phase_started[1].label == "Inner"
 
 
+@pytest.mark.integration
 class TestAgentResultFullTextOnce:
     """Test that handler receives exactly 1 AgentResult with full text.
 
@@ -734,7 +747,7 @@ class TestAgentResultFullTextOnce:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -759,7 +772,7 @@ class TestAgentResultFullTextOnce:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -780,7 +793,7 @@ class TestAgentResultFullTextOnce:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -794,6 +807,7 @@ class TestAgentResultFullTextOnce:
         assert len(delta_events) == 0, "No streaming deltas should reach handler"
 
 
+@pytest.mark.integration
 class TestStreamDoesNotAffectHandlerOutput:
     """.stream() controls internal execution mode, not display.
 
@@ -814,7 +828,7 @@ class TestStreamDoesNotAffectHandlerOutput:
         def non_stream_handler(event):
             non_stream_events.append(event)
 
-        agent = Agent(name="test", instructions="Reply with 'OK'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'OK'", model="gpt-5.5")
 
         async def flow_stream(msg: str) -> str:
             async with phase("Test"):
@@ -841,6 +855,7 @@ class TestStreamDoesNotAffectHandlerOutput:
         assert non_stream_results[0].content is not None
 
 
+@pytest.mark.integration
 class TestPrintFallback:
     """Test print() fallback when no handler and no ChatKit.
 
@@ -855,7 +870,7 @@ class TestPrintFallback:
         """print() is called with full text when no handler (non-streaming)."""
         from unittest.mock import patch
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -874,7 +889,7 @@ class TestPrintFallback:
         """print() is called with full text when no handler (streaming)."""
         from unittest.mock import patch
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -893,7 +908,7 @@ class TestPrintFallback:
         """print() should NOT be called when .silent() is used."""
         from unittest.mock import patch
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -912,7 +927,7 @@ class TestPrintFallback:
         """print() should NOT be called when .silent().stream() is used."""
         from unittest.mock import patch
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -936,7 +951,7 @@ class TestPrintFallback:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply with 'HELLO'", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -950,6 +965,7 @@ class TestPrintFallback:
         assert not mock_print.called, "print() should NOT be called when handler present"
 
 
+@pytest.mark.integration
 class TestFallbackPriority:
     """Test fallback priority: ChatKit > Handler > print.
 
@@ -969,7 +985,7 @@ class TestFallbackPriority:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         async def flow(msg: str) -> str:
             async with phase("Test"):
@@ -992,7 +1008,7 @@ class TestFallbackPriority:
         def handler(event):
             events.append(event)
 
-        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.2")
+        agent = Agent(name="test", instructions="Reply OK", model="gpt-5.5")
 
         mock_agent_context = MagicMock()
         mock_store = MagicMock()

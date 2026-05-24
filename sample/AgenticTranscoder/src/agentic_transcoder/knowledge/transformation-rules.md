@@ -28,7 +28,7 @@ from openai.types.shared.reasoning import Reasoning
 my_agent = Agent(
     name="My agent",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(
         store=True,
         reasoning=Reasoning(effort="low", summary="auto")
@@ -45,7 +45,7 @@ from agentic_flow import Agent, reasoning
 chat_agent = Agent(
     name="chat",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("low"),
 )
 ```
@@ -224,7 +224,7 @@ from pydantic import BaseModel
 my_agent = Agent(
     name="My agent",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=ModelSettings(store=True, reasoning=Reasoning(effort="low", summary="auto")),
 )
 
@@ -256,7 +256,7 @@ from agentic_flow import Agent, reasoning
 chat_agent = Agent(
     name="chat",
     instructions="You are a helpful assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("low"),
 )
 ```
@@ -291,7 +291,7 @@ guardrails_config = {
     "guardrails": [
         {"name": "Moderation", "config": {"categories": ["sexual/minors", "hate/threatening", ...]}},
         {"name": "Contains PII", "config": {"block": False, "entities": ["CREDIT_CARD", "US_SSN"]}},
-        {"name": "Jailbreak", "config": {"model": "gpt-5.2", "confidence_threshold": 0.7}}
+        {"name": "Jailbreak", "config": {"model": "gpt-5.5", "confidence_threshold": 0.7}}
     ]
 }
 
@@ -309,7 +309,7 @@ async def run_workflow(workflow_input):
 {
   "version": 1,
   "guardrails": [
-    {"name": "Jailbreak", "config": {"model": "gpt-5.2", "confidence_threshold": 0.7}},
+    {"name": "Jailbreak", "config": {"model": "gpt-5.5", "confidence_threshold": 0.7}},
     {"name": "Moderation", "config": {"categories": ["sexual/minors", "hate/threatening", ...]}},
     {"name": "Contains PII", "config": {"block": false, "entities": ["CREDIT_CARD", "US_SSN"]}}
   ]
@@ -359,7 +359,7 @@ async def guardrails_check(
 chat_agent = Agent(
     name="chat",
     instructions="You are a helpful chat assistant.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=reasoning("low"),
     input_guardrails=[guardrails_check],
 )

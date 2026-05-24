@@ -1,4 +1,4 @@
-"""AF v0.35 - Pythonic agent workflows.
+"""AF - Pythonic agent workflows.
 
 agent(prompt) returns an ExecutionSpec[T].
 Execution happens only when the resulting spec is awaited (returns T).
@@ -20,10 +20,10 @@ Example:
     from agents import SQLiteSession
 
     researcher = Agent(
-        name="Researcher", instructions="Research topics.", model="gpt-5.2"
+        name="Researcher", instructions="Research topics.", model="gpt-5.5"
     )
     responder = Agent(
-        name="Responder", instructions="Respond to user.", model="gpt-5.2"
+        name="Responder", instructions="Respond to user.", model="gpt-5.5"
     )
 
     async def flow(user_message: str) -> str:
@@ -60,11 +60,13 @@ Context behavior:
 from .agent import Agent, ExecutionSpec
 from .phase import PhaseSession, phase
 from .runner import RunHandle, Runner
+from .sandbox import SandboxAgent
 from .types import AgentResult, Event, Handler, PhaseEnded, PhaseStarted
 from .utils import reasoning
 
 __all__ = [
     "Agent",
+    "SandboxAgent",
     "ExecutionSpec",
     "Runner",
     "RunHandle",

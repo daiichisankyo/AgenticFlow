@@ -154,6 +154,21 @@ Each phase gets its own "workflow" in the ChatKit UI, which enables:
 - Clear visual separation of phases
 - Collapsible phase sections
 
+## Cleanup Guarantee
+
+`phase()` resets `current_in_phase`, `current_phase_session`, and
+`current_phase_session_history` in an outer `finally`, so the contextvars
+are restored even if a display side-effect inside the phase raises:
+
+- The `PhaseStarted` handler emit fails
+- ChatKit `emit_phase_label()` fails
+- The user's code inside `async with phase(...):` raises
+- `persist` writeback, `close_workflow()`, or `PhaseEnded` emit fails
+
+The exception propagates as expected, but a subsequent agent call after
+the phase block sees `current_in_phase is False` and no leaked
+`PhaseSession`. Cleanup wins over display.
+
 ## Summary
 
 | Aspect | Behavior |
@@ -161,7 +176,7 @@ Each phase gets its own "workflow" in the ChatKit UI, which enables:
 | Default | Internal thinking, discarded at phase end |
 | `persist=True` | Last exchange saved to Session |
 | `share_context=False` | Read Session, no PhaseSession |
-| Cleanup | Guaranteed even on exception |
+| Cleanup | Contextvars reset even when display side-effects raise |
 | Inheritance | Session history available to agents |
 | Events | `af.PhaseStarted` / `af.PhaseEnded` emitted |
 

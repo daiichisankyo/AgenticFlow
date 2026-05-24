@@ -5,13 +5,13 @@ import agentic_flow as af
 classifier = af.Agent(
     name="classifier",
     instructions="Classify as SIMPLE or COMPLEX.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("medium"),
 )
-researcher = af.Agent(name="researcher", instructions="Research.", model="gpt-5.2")
-reviewer = af.Agent(name="reviewer", instructions="Review. APPROVED or REJECTED.", model="gpt-5.2")
-refiner = af.Agent(name="refiner", instructions="Refine based on feedback.", model="gpt-5.2")
-responder = af.Agent(name="responder", instructions="Give final response.", model="gpt-5.2")
+researcher = af.Agent(name="researcher", instructions="Research.", model="gpt-5.5")
+reviewer = af.Agent(name="reviewer", instructions="Review. APPROVED or REJECTED.", model="gpt-5.5")
+refiner = af.Agent(name="refiner", instructions="Refine based on feedback.", model="gpt-5.5")
+responder = af.Agent(name="responder", instructions="Give final response.", model="gpt-5.5")
 
 
 async def my_flow(user_message: str) -> str:

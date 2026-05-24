@@ -4,8 +4,8 @@ from agents import SQLiteSession
 
 import agentic_flow as af
 
-researcher = af.Agent(name="researcher", instructions="Research topics.", model="gpt-5.2")
-responder = af.Agent(name="responder", instructions="Respond to user.", model="gpt-5.2")
+researcher = af.Agent(name="researcher", instructions="Research topics.", model="gpt-5.5")
+responder = af.Agent(name="responder", instructions="Respond to user.", model="gpt-5.5")
 
 
 async def my_flow(user_message: str) -> str:

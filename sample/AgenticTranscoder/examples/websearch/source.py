@@ -42,7 +42,7 @@ Output each search with:
   - "snippet": [Short Summary]
   - "url": [Placeholder or realistic, e.g. "https://example.com/article"]
 """,
-    model="gpt-5.2",
+    model="gpt-5.5",
     tools=[web_search_preview],
     model_settings=ModelSettings(
         store=True,

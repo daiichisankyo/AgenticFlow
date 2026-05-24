@@ -27,7 +27,7 @@ class TestAgents:
     def test_coder_has_correct_model(self):
         from agentic_transcoder.agents import coder
 
-        assert coder.sdk_kwargs.get("model") == "gpt-5.2"
+        assert coder.sdk_kwargs.get("model") == "gpt-5.5"
 
     def test_coder_has_reasoning_high(self):
         from agentic_transcoder.agents import coder

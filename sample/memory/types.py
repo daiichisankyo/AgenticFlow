@@ -48,4 +48,4 @@ class SessionMetadata(BaseModel):
 
     # Subscription/model info
     subscription: str = "free"
-    preferred_model: str = "gpt-5.2"
+    preferred_model: str = "gpt-5.5"

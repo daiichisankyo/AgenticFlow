@@ -278,7 +278,7 @@ Edit files in dependency order based on the matched SKILL pattern:
 1. **agent_specs.py** - Agent definitions
    - Intent: Define WHAT agents exist and their capabilities
    - Map each AgentBuilder Agent to Agentic Flow Agent
-   - Use model="gpt-5.2" for all agents
+   - Use model="gpt-5.5" for all agents
    - Apply reasoning() modifier as shown in SKILL
 
 2. **flow.py** - Flow structure

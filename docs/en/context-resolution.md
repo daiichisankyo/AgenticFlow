@@ -6,12 +6,13 @@ AgenticFlow uses Python's `contextvars` module to manage execution context impli
 
 ## Available ContextVars
 
-AgenticFlow defines 6 contextvars across 3 modules:
+AgenticFlow defines 7 contextvars across 3 modules:
 
 | ContextVar | Module | Purpose |
 |:-----------|:-------|:--------|
 | `current_session` | `agentic_flow.agent` | Current Session (conversation history) |
 | `current_handler` | `agentic_flow.agent` | Current event Handler (UI callbacks) |
+| `current_run_config` | `agentic_flow.agent` | Current `RunConfig` injected by `Runner(default_run_config=...)` (sandbox transport, tracing, model overrides) |
 | `current_phase_session` | `agentic_flow.agent` | Current PhaseSession (inside phase with share_context=True) |
 | `current_in_phase` | `agentic_flow.phase` | Boolean flag: currently inside any phase() |
 | `current_phase_session_history` | `agentic_flow.phase` | Cached Session history (share_context=False) |
@@ -113,9 +114,10 @@ async def my_flow(user_message: str):
 
 ```python
 from agentic_flow.agent import (
-    current_session,
     current_handler,
     current_phase_session,
+    current_run_config,
+    current_session,
 )
 from agentic_flow.phase import current_in_phase
 
@@ -123,6 +125,7 @@ def debug_current_context():
     """Print current execution context state."""
     print(f"Session: {current_session.get()}")
     print(f"Handler: {current_handler.get()}")
+    print(f"RunConfig: {current_run_config.get()}")
     print(f"PhaseSession: {current_phase_session.get()}")
     print(f"In Phase: {current_in_phase.get()}")
 ```
@@ -131,7 +134,7 @@ def debug_current_context():
 
 ### By Runner
 
-Runner sets `current_session` and `current_handler` when executing a flow:
+Runner sets `current_session`, `current_handler`, and `current_run_config` when executing a flow:
 
 ```python
 # Inside Runner.__call__()
@@ -144,14 +147,22 @@ async def __call__(self, user_message: str) -> Any:
     if self.handler is not None:
         handler_token = current_handler.set(self.handler)
 
+    run_config_token = None
+    if self.default_run_config is not None:
+        run_config_token = current_run_config.set(self.default_run_config)
+
     try:
         return await self.flow(user_message)
     finally:
+        if run_config_token is not None:
+            current_run_config.reset(run_config_token)
         if handler_token is not None:
             current_handler.reset(handler_token)
         if session_token is not None:
             current_session.reset(session_token)
 ```
+
+`current_run_config` is read by `ExecutionSpec.build_run_kwargs()` only when no explicit `.run_config()` modifier is applied to the spec — see [Modifiers: Run Config Resolution Order](concepts/modifiers.md#run_config) for the full priority chain.
 
 ### By phase()
 
@@ -252,13 +263,14 @@ def resolve_input(self) -> tuple[Any, Any]:
 
 | Component | Location |
 |:----------|:---------|
-| ContextVar declarations (agent) | `src/agentic_flow/agent.py:36-40` |
-| ContextVar declarations (phase) | `src/agentic_flow/phase.py:33-39` |
-| ContextVar declarations (chatkit) | `src/agentic_flow/chatkit.py:36-38` |
-| Context resolution | `src/agentic_flow/agent.py:250-307` (`ExecutionSpec.resolve_input`) |
-| Runner injection | `src/agentic_flow/runner.py:122-138` (`Runner.__call__`) |
-| Phase scoping | `src/agentic_flow/phase.py:111-213` (`phase` context manager) |
-| ChatKit injection | `src/agentic_flow/chatkit.py:182-287` (`run_with_chatkit_context`) |
+| ContextVar declarations (agent) | `src/agentic_flow/agent.py` (`current_handler`, `current_session`, `current_run_config`, `current_phase_session`) |
+| ContextVar declarations (phase) | `src/agentic_flow/phase.py` (`current_in_phase`, `current_phase_session_history`) |
+| ContextVar declarations (chatkit) | `src/agentic_flow/chatkit.py` (`current_chatkit_context`) |
+| Context resolution (input/session) | `src/agentic_flow/agent.py` (`ExecutionSpec.resolve_input`) |
+| RunConfig resolution | `src/agentic_flow/agent.py` (`ExecutionSpec.build_run_kwargs`) |
+| Runner injection | `src/agentic_flow/runner.py` (`Runner.__call__`) |
+| Phase scoping | `src/agentic_flow/phase.py` (`phase` context manager) |
+| ChatKit injection | `src/agentic_flow/chatkit.py` (`run_with_chatkit_context`) |
 
 ## Best Practices
 

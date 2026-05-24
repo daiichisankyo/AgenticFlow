@@ -6,6 +6,7 @@ Comprehensive tests for all ExecutionSpec modifiers organized by axis:
 - HOW axis: .stream(), .silent()
 - LIMITS axis: .max_turns(n)
 - SDK pass-through: .run_config(), .context(), .run_kwarg()
+- run_config resolution priority (modifier > Runner contextvar > none)
 
 These tests verify modifier behavior without API calls.
 No mocks required - pure unit tests.
@@ -22,12 +23,27 @@ from agentic_flow import Agent, ExecutionSpec
 from tests.conftest import Analysis
 
 
+@dataclass
+class MockRunConfig:
+    """Shared stand-in for `agents.RunConfig` across modifier unit tests.
+
+    Each field is Optional so individual tests can set just the field they
+    care about (model / workflow_name / tracing_disabled) without redefining
+    the dataclass per test. Identity-based assertions (`is` checks) and
+    field-value assertions both work as expected.
+    """
+
+    model: str | None = None
+    workflow_name: str | None = None
+    tracing_disabled: bool | None = None
+
+
 class TestExecutionSpecTypeParameter:
     """Tests for ExecutionSpec[T] type parameter - docs example."""
 
     def test_str_output_type_annotation(self):
         """ExecutionSpec[str] for agent without output_type."""
-        assistant = Agent(name="assistant", instructions="...", model="gpt-5.2")
+        assistant = Agent(name="assistant", instructions="...", model="gpt-5.5")
 
         spec: ExecutionSpec[str] = assistant("Hello")
 
@@ -40,7 +56,7 @@ class TestExecutionSpecTypeParameter:
             name="analyzer",
             instructions="...",
             output_type=Analysis,
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         spec: ExecutionSpec[Analysis] = analyzer("Analyze this text")
@@ -54,7 +70,7 @@ class TestExecutionSpecTypeParameter:
             name="analyzer",
             instructions="...",
             output_type=Analysis,
-            model="gpt-5.2",
+            model="gpt-5.5",
         )
 
         spec1: ExecutionSpec[Analysis] = analyzer("text")
@@ -242,11 +258,7 @@ class TestRunConfig:
         agent = Agent(name="test", instructions="test")
         spec = agent("prompt")
 
-        @dataclass
-        class MockRunConfig:
-            tracing_disabled: bool = True
-
-        config = MockRunConfig()
+        config = MockRunConfig(tracing_disabled=True)
         configured_spec = spec.run_config(config)
 
         assert spec is not configured_spec
@@ -258,11 +270,7 @@ class TestRunConfig:
         agent = Agent(name="test", instructions="test")
         spec = agent("prompt").stream().max_turns(5)
 
-        @dataclass
-        class MockRunConfig:
-            workflow_name: str = "test"
-
-        configured_spec = spec.run_config(MockRunConfig())
+        configured_spec = spec.run_config(MockRunConfig(workflow_name="test"))
 
         assert configured_spec.input == spec.input
         assert configured_spec.is_streaming is True
@@ -272,11 +280,7 @@ class TestRunConfig:
         """run_config().stream() works."""
         agent = Agent(name="test", instructions="test")
 
-        @dataclass
-        class MockRunConfig:
-            model: str = "gpt-5.2-turbo"
-
-        spec = agent("prompt").run_config(MockRunConfig()).stream()
+        spec = agent("prompt").run_config(MockRunConfig(model="gpt-5.5-turbo")).stream()
 
         assert "run_config" in spec.run_kwargs
         assert spec.is_streaming is True
@@ -380,10 +384,6 @@ class TestModifierCombinations:
         agent = Agent(name="test", instructions="test")
 
         @dataclass
-        class MockRunConfig:
-            tracing_disabled: bool = True
-
-        @dataclass
         class AppContext:
             user_id: str
 
@@ -391,7 +391,7 @@ class TestModifierCombinations:
             agent("complex task")
             .max_turns(10)
             .context(AppContext("u123"))
-            .run_config(MockRunConfig())
+            .run_config(MockRunConfig(tracing_disabled=True))
             .run_kwarg(custom_param="value")
             .stream()
             .silent()
@@ -427,16 +427,12 @@ class TestModifierCombinations:
         agent = Agent(name="test", instructions="test")
 
         @dataclass
-        class MockRunConfig:
-            model: str = "test"
-
-        @dataclass
         class AppContext:
             user: str
 
         spec = (
             agent("prompt")
-            .run_config(MockRunConfig())
+            .run_config(MockRunConfig(model="test"))
             .context(AppContext("u1"))
             .run_kwarg(extra="value")
         )
@@ -611,21 +607,13 @@ class TestRunConfigVariants:
         """RunConfig with model override works."""
         agent = Agent(name="test", instructions="test")
 
-        @dataclass
-        class MockRunConfig:
-            model: str = "gpt-5.2-turbo"
+        spec = agent("prompt").run_config(MockRunConfig(model="gpt-5.5-turbo"))
 
-        spec = agent("prompt").run_config(MockRunConfig(model="gpt-5.2-turbo"))
-
-        assert spec.run_kwargs["run_config"].model == "gpt-5.2-turbo"
+        assert spec.run_kwargs["run_config"].model == "gpt-5.5-turbo"
 
     def test_run_config_with_workflow_name(self):
         """RunConfig with workflow_name works."""
         agent = Agent(name="test", instructions="test")
-
-        @dataclass
-        class MockRunConfig:
-            workflow_name: str = "my_workflow"
 
         spec = agent("prompt").run_config(MockRunConfig(workflow_name="my_workflow"))
 
@@ -634,10 +622,6 @@ class TestRunConfigVariants:
     def test_run_config_with_tracing_disabled(self):
         """RunConfig with tracing_disabled works."""
         agent = Agent(name="test", instructions="test")
-
-        @dataclass
-        class MockRunConfig:
-            tracing_disabled: bool = True
 
         spec = agent("prompt").run_config(MockRunConfig(tracing_disabled=True))
 
@@ -676,3 +660,64 @@ class TestContextWithStream:
 
         assert spec.run_kwargs.get("context") is ctx
         assert spec.is_streaming is True
+
+
+class TestRunConfigResolution:
+    """build_run_kwargs() resolves run_config in priority order:
+    1. .run_config(...) modifier on this spec
+    2. Runner-injected current_run_config contextvar
+    3. SDK default (no run_config kwarg passed at all)
+    """
+
+    def test_modifier_run_config_used_when_present(self):
+        """When .run_config() is set on spec, it is used as-is."""
+        agent = Agent(name="test", instructions="test")
+
+        rc = MockRunConfig(workflow_name="modifier")
+        spec = agent("prompt").run_config(rc)
+        kwargs = spec.build_run_kwargs(session=None)
+
+        assert kwargs.get("run_config") is rc
+
+    def test_contextvar_used_when_modifier_absent(self):
+        """When .run_config() is not set, contextvar value is injected."""
+        from agentic_flow.agent import current_run_config
+
+        agent = Agent(name="test", instructions="test")
+        spec = agent("prompt")
+
+        rc = MockRunConfig(workflow_name="contextvar")
+        token = current_run_config.set(rc)
+        try:
+            kwargs = spec.build_run_kwargs(session=None)
+        finally:
+            current_run_config.reset(token)
+
+        assert kwargs.get("run_config") is rc
+
+    def test_modifier_overrides_contextvar(self):
+        """When both modifier and contextvar are set, modifier wins."""
+        from agentic_flow.agent import current_run_config
+
+        agent = Agent(name="test", instructions="test")
+        rc_modifier = MockRunConfig(workflow_name="modifier")
+        rc_contextvar = MockRunConfig(workflow_name="contextvar")
+
+        spec = agent("prompt").run_config(rc_modifier)
+
+        token = current_run_config.set(rc_contextvar)
+        try:
+            kwargs = spec.build_run_kwargs(session=None)
+        finally:
+            current_run_config.reset(token)
+
+        assert kwargs.get("run_config") is rc_modifier
+        assert kwargs.get("run_config") is not rc_contextvar
+
+    def test_no_modifier_no_contextvar_omits_kwarg(self):
+        """Without modifier or contextvar, run_config is NOT passed to SDK."""
+        agent = Agent(name="test", instructions="test")
+        spec = agent("prompt")
+        kwargs = spec.build_run_kwargs(session=None)
+
+        assert "run_config" not in kwargs

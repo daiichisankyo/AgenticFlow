@@ -37,7 +37,7 @@ class af.Agent(Generic[T]):
 |:---------|:-----|:------------|
 | `name` | `str` | Agent name (required) |
 | `instructions` | `str` | System instructions |
-| `model` | `str` | Model name (e.g., `"gpt-5.2"`) |
+| `model` | `str` | Model name (e.g., `"gpt-5.5"`) |
 | `model_settings` | `ModelSettings` | Model configuration |
 | `tools` | `list` | Tool functions |
 | `handoffs` | `list` | Handoff agents |
@@ -53,11 +53,82 @@ class Analysis(BaseModel):
     score: float
 
 # str output
-assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.2")
+assistant = af.Agent(name="assistant", instructions="...", model="gpt-5.5")
 
 # Typed output
-analyzer = af.Agent(name="analyzer", instructions="...", output_type=Analysis, model="gpt-5.2")
+analyzer = af.Agent(name="analyzer", instructions="...", output_type=Analysis, model="gpt-5.5")
 ```
+
+---
+
+## SandboxAgent
+
+```python
+import agentic_flow as af
+```
+
+### SandboxAgent[T]
+
+Subclass of `Agent[T]` that wraps `agents.sandbox.SandboxAgent` (introduced in `openai-agents` 0.14). Returns the same `ExecutionSpec[T]` and supports the same modifier set as `Agent`. Use when an agent needs a persistent containerized workspace, snapshots, or sandbox memory.
+
+```python
+class af.SandboxAgent(af.Agent[T]):
+    def __init__(
+        self,
+        *,
+        output_type: type[T] | None = None,
+        **sdk_kwargs: Any,
+    ) -> None: ...
+```
+
+**Parameters:** Same as `Agent`. The constructor forwards `**sdk_kwargs` verbatim to `agents.sandbox.SandboxAgent`, which accepts every kwarg `agents.Agent` accepts plus four sandbox-specific ones.
+
+**Sandbox-specific sdk_kwargs:**
+
+| Argument | Type | Description |
+|:---------|:-----|:------------|
+| `default_manifest` | `agents.sandbox.Manifest \| None` | Workspace declaration (root, entries, environment, users, groups, path grants). |
+| `base_instructions` | `str \| Callable \| None` | Instructions injected by the sandbox runtime, combined with `instructions`. |
+| `capabilities` | `Sequence[Capability]` | Sandbox runtime capabilities the agent declares. |
+| `run_as` | `User \| str \| None` | OS-level user the sandboxed processes run as. |
+
+Sandbox runtime configuration (which sandbox client, snapshot to materialize, concurrency limits) lives in `RunConfig(sandbox=SandboxRunConfig(...))`. AF treats `RunConfig` as part of the **execution environment**, the same way it treats `Session` and `Handler`: the recommended path is to inject it on the `Runner` via `default_run_config`, and the per-call `.run_config()` modifier remains available as an override. No new modifier is added.
+
+**Example (recommended — Runner injection):**
+
+```python
+import agentic_flow as af
+from agents import RunConfig, SQLiteSession
+from agents.sandbox import Manifest, SandboxRunConfig
+
+coder = af.SandboxAgent(
+    name="coder",
+    instructions="Implement the spec in Python.",
+    model="gpt-5.5",
+    default_manifest=Manifest(version=1, root="/work", entries={}),
+)
+
+async def my_flow(spec: str) -> str:
+    return await coder(spec).stream()
+
+runner = af.Runner(
+    flow=my_flow,
+    session=SQLiteSession("chat.db"),
+    default_run_config=RunConfig(sandbox=SandboxRunConfig()),
+)
+```
+
+**Example (per-call override):**
+
+```python
+result = await coder("resume from snapshot").run_config(
+    RunConfig(sandbox=SandboxRunConfig(snapshot=other_snapshot))
+).stream()
+```
+
+Resolution order, most-specific first: `.run_config()` on the spec → `Runner(default_run_config=...)` via contextvar → SDK default.
+
+See [Sandbox Agents](../concepts/sandbox.md) for the design rationale and the AF-vs-SDK boundary.
 
 ---
 
@@ -140,7 +211,8 @@ import agentic_flow as af
 
 ### Runner
 
-Flow execution container with session and handler injection.
+Flow execution container with session, handler, and `default_run_config`
+injection.
 
 ```python
 class Runner:
@@ -149,6 +221,7 @@ class Runner:
         flow: Callable[[str], Awaitable[T]],
         session: Session | None = None,
         handler: af.Handler | None = None,
+        default_run_config: RunConfig | None = None,
     ) -> None: ...
 
     async def __call__(self, user_message: str) -> T: ...
@@ -163,6 +236,7 @@ class Runner:
 | `flow` | `Callable[[str], Awaitable[T]]` | Async function to execute |
 | `session` | `Session \| None` | SDK Session for history |
 | `handler` | `Handler \| None` | Event handler |
+| `default_run_config` | `RunConfig \| None` | App-wide `RunConfig` (sandbox transport, tracing, model overrides) injected via `current_run_config` contextvar; per-call `.run_config()` modifier on `ExecutionSpec` overrides this |
 
 **Methods:**
 
@@ -430,7 +504,7 @@ import agentic_flow as af
 agent = af.Agent(
     name="thinker",
     instructions="Think step by step.",
-    model="gpt-5.2",
+    model="gpt-5.5",
     model_settings=af.reasoning("high"),
 )
 ```
@@ -457,6 +531,12 @@ async def run_with_chatkit_context(
 ) -> AsyncIterator[ThreadStreamEvent]: ...
 ```
 
+ChatKit mode preserves Runner's full injection contract: this function sets
+`current_chatkit_context` and then delegates flow execution to
+`Runner.__call__`, so `session`, `handler`, and `default_run_config` reach
+every agent call exactly as in non-ChatKit mode. See
+[Flow & Runner: ChatKit Mode](../concepts/flow-runner.md#chatkit-mode).
+
 **Parameters:**
 
 | Parameter | Type | Description |
@@ -477,7 +557,7 @@ async def run_with_chatkit_context(
 import agentic_flow as af
 
 # Available exports:
-# af.Agent, af.ExecutionSpec, af.Runner, af.RunHandle, af.phase,
-# af.PhaseSession, af.Handler, af.Event, af.PhaseStarted,
+# af.Agent, af.SandboxAgent, af.ExecutionSpec, af.Runner, af.RunHandle,
+# af.phase, af.PhaseSession, af.Handler, af.Event, af.PhaseStarted,
 # af.PhaseEnded, af.AgentResult, af.reasoning
 ```

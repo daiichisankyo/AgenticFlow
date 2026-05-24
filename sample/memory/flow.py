@@ -24,7 +24,7 @@ from .summaries import ConversationStore
 from .types import SessionMetadata
 from .user_memory import UserMemory
 
-MODEL = os.getenv("MODEL_NAME", "gpt-5.2")
+MODEL = os.getenv("MODEL_NAME", "gpt-5.5")
 
 MAX_SESSION_MESSAGES = 20
 
